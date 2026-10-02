@@ -1,0 +1,29 @@
+/**
+ * ピアノロールのノート選択モード
+ *
+ * - toggle: クリックでノートを選択/選択解除
+ * - range: 2つのノートをクリックして範囲選択
+ * - pitch: ピッチ編集モード（ポルタメント操作）
+ * - add: ノート追加モード
+ */
+export type NoteSelectMode = "toggle" | "range" | "pitch" | "add";
+
+/**
+ * NoteSelectModeの全ての値
+ */
+export const NOTE_SELECT_MODES: ReadonlyArray<NoteSelectMode> = [
+  "toggle",
+  "range",
+  "pitch",
+  "add",
+] as const;
+
+/**
+ * NoteSelectModeが有効な値かどうかをチェック
+ */
+export const isNoteSelectMode = (value: unknown): value is NoteSelectMode => {
+  return (
+    typeof value === "string" &&
+    NOTE_SELECT_MODES.includes(value as NoteSelectMode)
+  );
+};

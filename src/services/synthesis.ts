@@ -1,0 +1,224 @@
+import { Wave } from "utauwav";
+import { renderingConfig } from "../config/rendering";
+import { LOG } from "../lib/Logging";
+import { resampCache } from "../lib/ResampCache";
+import { BaseVoiceBank } from "../lib/VoiceBanks/BaseVoiceBank";
+import { Wavtool } from "../lib/Wavtool";
+import { useCookieStore } from "../store/cookieStore";
+import { useMusicProjectStore } from "../store/musicProjectStore";
+import { AppendRequestBase, ResampRequest } from "../types/request";
+import { getWaveData } from "./resampWorker";
+import { ResampWorkerPool } from "./workerPool";
+
+export class SynthesisWorker {
+  /**
+   * 設定ファイルで定義された数のresampworkerを予めloadしておき、適切にタスクを割り振るためのworker pool
+   */
+  workersPool: ResampWorkerPool;
+
+  /**
+   * resamplerの結果を格納し、wavtoolの実行順序を制御するためのque
+   */
+  resampResults: Array<Promise<Float64Array>>;
+
+  /**
+   * 音声合成における結合機
+   */
+  wavtool: Wavtool;
+
+  /**
+   * クラス初期化時にworker poolも初期化しておく
+   */
+  constructor() {
+    const { workersCount } = useCookieStore.getState();
+    LOG.debug("workerspoolの初期化", "synthesis,SynthesisWorker");
+    this.workersPool = new ResampWorkerPool(workersCount);
+    LOG.debug("wavtoolの初期化", "synthesis,SynthesisWorker");
+    this.wavtool = new Wavtool();
+  }
+
+  /**
+   * 編集中の楽譜データを用いて、wavファイルを生成する。
+   * @param selectNotes 再生するノートのインデックス列。空の配列が渡された場合、全ノートが対象となる。
+   * @returns 16bit/44100Hzのwavデータを表すArrayBuffer
+   */
+  async synthesis(
+    selectNotes: Array<number>,
+    setSynthesisCount: (number) => void = (value) => {},
+    backgroundAudio?: {
+      wav: Wave;
+      offsetMs: number;
+      volume: number;
+      mute: boolean;
+    }
+  ): Promise<ArrayBuffer> {
+    this.wavtool = new Wavtool();
+    this.workersPool.clearTasks();
+    const { vb, ust } = useMusicProjectStore.getState();
+    const { defaultNote, workersCount } = useCookieStore.getState();
+    const requestParams = ust.getRequestParam(vb, defaultNote, selectNotes);
+    const targetIndexes = ust.getCacheIndex(vb, selectNotes);
+    LOG.info("音声合成開始", "synthesis,SynthesisWorker");
+    this.resampResults = requestParams.map((p, i) =>
+      this.resamp(p, vb, targetIndexes[i])
+    );
+    await this.append(requestParams, 0, setSynthesisCount);
+    LOG.info("音声合成終了", "synthesis,SynthesisWorker");
+
+    if (backgroundAudio && !backgroundAudio.mute) {
+      LOG.info("バックグラウンドオーディオを合成", "synthesis,SynthesisWorker");
+      this.wavtool.mixBackgroundAudio(
+        backgroundAudio.wav,
+        backgroundAudio.offsetMs,
+        backgroundAudio.volume
+      );
+    }
+
+    /** 16bit/44100HzのWaveオブジェクトのbuffer */
+    try {
+      LOG.info("wavに変換", "synthesis,SynthesisWorker");
+      const wavBuf = this.wavtool.output();
+      return wavBuf;
+    } catch (error) {
+      LOG.error("wav変換に失敗しました", "synthesis,SynthesisWorker");
+      throw error;
+    }
+  }
+
+  /**
+   * wavtoolに渡すためのwavデータ部分を表すFloat64ArrayのPromiseを返す。
+   * 休符の場合0埋めで即解決し、音符の場合はresampWorkerに処理を渡して、完了次第解決する
+   * @param param 合成パラメータ
+   * @param vb 合成に使う音声ライブラリ
+   * @param index 合成するノートのインデックス。キャッシュに使用
+   * @returns 休符の場合0埋めで即解決し、音符の場合はresampWorkerの処理結果
+   */
+  resamp = async (
+    param: {
+      resamp: ResampRequest | undefined;
+      append: AppendRequestBase;
+    },
+    vb: BaseVoiceBank,
+    index: number
+  ): Promise<Float64Array> => {
+    if (param.resamp === undefined && param.append.inputWav !== undefined) {
+      LOG.debug(
+        `$direct_true。index:${index},request:${JSON.stringify(param.append)}`,
+        "synthesis,SynthesisWorker"
+      );
+      const promise = getWaveData(
+        param.append.inputWav,
+        param.append.stp,
+        param.append.length,
+        vb
+      ).then((result) => {
+        return Float64Array.from(result);
+      });
+      return promise;
+    }
+    if (param.resamp === undefined) {
+      /** 休符の場合0埋めで返す */
+      const requireLength = Math.ceil(
+        (param.append.length / 1000) * renderingConfig.frameRate
+      );
+      LOG.debug(`休符。長さ:${requireLength}`, "synthesis,SynthesisWorker");
+      return new Float64Array(requireLength);
+    } else {
+      const key = resampCache.createKey(param.resamp);
+      if (resampCache.checkKey(index, key)) {
+        LOG.debug(
+          `キャッシュヒット。index:${index},request:${JSON.stringify(
+            param.resamp
+          )}`,
+          "synthesis,SynthesisWorker"
+        );
+        return resampCache.get(index, key);
+      } else {
+        LOG.debug(
+          `workerpoolにセット。request:${JSON.stringify(param.resamp)}`,
+          "synthesis,SynthesisWorker"
+        );
+        const promise = this.workersPool
+          .runResamp(param.resamp, vb, index)
+          .then((result) => {
+            resampCache.set(index, key, result);
+            return result;
+          })
+          .catch((error) => {
+            if (error.message !== "Canceled") {
+              throw error;
+            }
+            return new Float64Array(0);
+          });
+        return promise;
+      }
+    }
+  };
+
+  /**
+   * ノートの頭から順番にwavを結合していき、全ての結合が終了したら解決するpromiseを返す
+   * @param params 今回再生対象のすべての合成パラメータ
+   * @param index 再帰的に呼び出した際、現在参照しているノートのインデックス
+   * @returns appendの処理が完了したら解決するpromise
+   */
+  append = async (
+    params: Array<{
+      resamp: ResampRequest | undefined;
+      append: AppendRequestBase;
+    }>,
+    index: number = 0,
+    setSynthesisCount: (number) => void
+  ): Promise<void> => {
+    // 全てのタスクが処理済みの場合は終了
+    if (index >= this.resampResults.length) {
+      return;
+    }
+    let res: Float64Array;
+    try {
+      // 現在のノートのresamp結果を待つ
+      res = await this.resampResults[index];
+    } catch (error) {
+      const errMsg = `resampResultsでエラー発生(index:${index}): ${error}`;
+      LOG.error(errMsg, "synthesis,SynthesisWorker");
+      throw new Error(errMsg);
+    }
+    try {
+      LOG.debug(
+        `wavtoolで結合。${index},params:${JSON.stringify(
+          params[index].append
+        )}`,
+        "synthesis,SynthesisWorker"
+      );
+      setSynthesisCount(index);
+      this.wavtool.append({
+        inputData: Array.from(res),
+        ...params[index].append,
+      });
+      // 次のタスクを処理する
+      await this.append(params, index + 1, setSynthesisCount);
+    } catch (error) {
+      const errMsg = `append処理でエラー発生(index:${index}): ${error}`;
+      LOG.error(errMsg, "synthesis,SynthesisWorker");
+      throw new Error(errMsg);
+    }
+  };
+
+  /**
+   * ノートインデックスを指定し、該当するタスクをキャンセルする
+   * @param index ノートのインデックス
+   */
+  clearTask = (index: number) => {
+    this.workersPool.clearTask(index);
+  };
+
+  reload = () => {
+    const { workersCount } = useCookieStore.getState();
+    LOG.debug("workerspoolの初期化", "synthesis,SynthesisWorker");
+    this.workersPool = new ResampWorkerPool(workersCount);
+    LOG.debug("wavtoolの初期化", "synthesis,SynthesisWorker");
+  };
+
+  isReady = (): boolean => {
+    return this.workersPool.workers.every((w) => w.worker.isReady === true);
+  };
+}

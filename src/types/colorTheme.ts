@@ -1,0 +1,23 @@
+export const colors = [
+  "default",
+  "red",
+  "orange",
+  "yellow",
+  "lightgreen",
+  "green",
+  "blue",
+  "aqua",
+  "pink",
+  "brown",
+  "legacyDefault",
+  "legacyRed",
+  "legacyOrange",
+  "legacyYellow",
+  "legacyLightgreen",
+  "legacyGreen",
+  "legacyBlue",
+  "legacyAqua",
+  "legacyPink",
+  "legacyBrown",
+] as const;
+export type ColorTheme = (typeof colors)[number];

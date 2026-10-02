@@ -1,0 +1,22 @@
+import { TextField } from "@mui/material";
+import React from "react";
+export const EnvelopeTextField: React.FC<{
+  label: string;
+  index: number;
+  value: string;
+  setValue: (index: number, value: string) => void;
+  onBlur: (index: number) => void;
+}> = (props) => {
+  return (
+    <TextField
+      sx={{ my: 1 }}
+      label={props.label}
+      size="small"
+      type="number"
+      variant="outlined"
+      value={props.value ?? ""}
+      onChange={(e) => props.setValue(props.index, e.target.value)}
+      onBlur={() => props.onBlur(props.index)}
+    />
+  );
+};

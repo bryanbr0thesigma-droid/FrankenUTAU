@@ -1,0 +1,549 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { Wave } from "utauwav";
+import { EDITOR_CONFIG } from "../../config/editor";
+import { LOG } from "../../lib/Logging";
+import { resampCache } from "../../lib/ResampCache";
+import { SynthesisWorker } from "../../services/synthesis";
+import { useCookieStore } from "../../store/cookieStore";
+import { useMusicProjectStore } from "../../store/musicProjectStore";
+import { useSnackBarStore } from "../../store/snackBarStore";
+import { NoteSelectMode } from "../../types/noteSelectMode";
+import { AddNotePortal } from "./AddNotePortal";
+import { FooterMenu } from "./FooterMenu/FooterMenu";
+import { Pianoroll } from "./Pianoroll/Pianoroll";
+import { PitchPortal } from "./PitchPortal/PitchPortal";
+
+export const EditorView: React.FC<{
+  checkWorkerReady?: (synthesisWorker: SynthesisWorker) => boolean;
+}> = ({
+  checkWorkerReady = CheckWorkerReady, // デフォルト値として元の関数を使用
+}) => {
+  const { t } = useTranslation();
+  const { vb, notes, ustFlags, phonemizer, setNote } = useMusicProjectStore();
+  const { defaultNote } = useCookieStore();
+  const synthesisWorker = React.useMemo(() => new SynthesisWorker(), []);
+  /**
+   * ノートのインデックス一覧
+   */
+  const [selectNotesIndex, setSelectNotesIndex] = React.useState<Array<number>>(
+    []
+  );
+  /**
+   * 生成したwavのデータurl
+   */
+  const [wavUrl, setWavUrl] = React.useState<string>();
+  /**
+   * 生成処理の処理状況
+   */
+  const [synthesisProgress, setSynthesisProgress] =
+    React.useState<boolean>(false);
+  /**
+   * 生成処理の進捗状況をいくつめのノートまで進んだかで管理する処理
+   */
+  const [synthesisCount, setSynthesisCount] = React.useState<number>(0);
+  /**
+   * 再生処理待ちの状態
+   */
+  const [playReady, setPlayReady] = React.useState<boolean>(false);
+  /**
+   * 再生中の状態
+   */
+  const [playing, setPlaying] = React.useState<boolean>(false);
+  /**
+   * 再生時間
+   */
+  const [playingMs, setPlayingMs] = React.useState<number>(0);
+  /**
+   * 選択モード
+   */
+  const [selectMode, setSelectMode] = React.useState<NoteSelectMode>("toggle");
+  /** ピッチ編集対象のノート */
+  const [pitchTargetIndex, setPitchTargetIndex] = React.useState<
+    number | undefined
+  >(undefined);
+  /** ピッチ編集モードで操作するポルタメント */
+  const [targetPoltament, setTargetPoltament] = React.useState<
+    number | undefined
+  >(undefined);
+  /** ノート追加モードで追加するノートの長さ */
+  const [addNoteLength, setAddNoteLength] = React.useState<number>(480);
+  /** ノート追加モードで追加するノートの歌詞 */
+  const [addNoteLyric, setAddNoteLyric] = React.useState<string>("あ");
+  /** 歌詞編集モードの対象ノート */
+  const [lyricTargetIndex, setLyricTargetIndex] = React.useState<
+    number | undefined
+  >(undefined);
+  const [notesLeftMs, setNotesLeftMs] = React.useState<number[]>([]);
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  // 伴奏音声のデータ
+  const [backgroundAudioWav, setBackgroundAudioWav] = React.useState<Wave>();
+  // 伴奏音声用のデータURL
+  const [backgroundWavUrl, setBackgroundWavUrl] = React.useState<string>();
+  // 伴奏用のオフセット値（ミリ秒）
+  const [backgroundOffsetMs, setBackgroundOffsetMs] = React.useState<number>(0);
+  const [backgroundVolume, setBackgroundVolume] = React.useState<number>(0.5); // 0.0 - 1.0
+  const [backgroundMuted, setBackgroundMuted] = React.useState<boolean>(false);
+  // ノート末尾から伴奏のみを再生する際の時間(小節数)
+  const [backgroundPlayDuration, setBackgroundPlayDuration] =
+    React.useState<number>(4);
+  const [backgroundPlayEndMs, setBackgroundPlayEndMs] =
+    React.useState<number>(0);
+
+  const backgroundAudioRef = React.useRef<HTMLAudioElement>(null);
+  const snackBarStore = useSnackBarStore();
+
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  React.useEffect(() => {
+    LOG.debug("vbかnotesかselectNotesIndexの更新を検知", "EditorView");
+    LOG.debug("生成済みwavのクリア", "EditorView");
+    setWavUrl(undefined);
+  }, [vb, notes, selectNotesIndex, phonemizer]);
+
+  React.useEffect(() => {
+    LOG.debug("vbの更新を検知。全てのキャッシュクリア", "EditorView");
+    resampCache.clear();
+    makeCache();
+  }, [vb]);
+
+  React.useEffect(() => {
+    LOG.debug("phonemizerの更新を検知。全てのキャッシュクリア", "EditorView");
+    resampCache.clear();
+    makeCache();
+  }, [phonemizer]);
+
+  React.useEffect(() => {
+    timerRef.current = setTimeout(() => {
+      LOG.debug("notesかustFlagsかdefaultNoteの更新検知", "EditorView");
+      makeCache();
+    }, EDITOR_CONFIG.MAKE_CACHE_DELAT);
+
+    return () => {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    };
+  }, [notes, ustFlags, defaultNote]);
+
+  React.useEffect(() => {
+    LOG.debug("selectNotesIndexの更新を検知", "EditorView");
+    if (selectMode !== "pitch") {
+      setSelectMode("toggle");
+    } else {
+      setPitchTargetIndex(selectNotesIndex[0]);
+    }
+  }, [selectNotesIndex]);
+
+  React.useEffect(() => {
+    LOG.debug("selectModeの更新を検知", "EditorView");
+    if (selectMode !== "pitch") {
+      setPitchTargetIndex(undefined);
+    }
+  }, [selectMode]);
+  React.useEffect(() => {
+    LOG.debug("pitchTargetIndexの更新検知", "EditorView");
+    if (pitchTargetIndex === undefined) {
+      setSelectMode("toggle");
+    } else {
+      const n = notes[pitchTargetIndex];
+      if (n.pbs === undefined) {
+        n.pbs = "-40;0";
+        n.pbw = "80";
+        n.pbm = "";
+        setNote(n.index, n);
+      }
+      setSelectMode("pitch");
+    }
+    setTargetPoltament(undefined);
+  }, [pitchTargetIndex]);
+
+  /**
+   * バックグラウンドでキャッシュを生成する
+   */
+  const makeCache = () => {
+    if (vb === null) return;
+    if (checkWorkerReady(synthesisWorker)) {
+      LOG.debug(
+        `キャッシュ生成を試みましたが、workerが読み込まれていません。`,
+        "EditorView"
+      );
+      return;
+    }
+    notes.forEach((n) => {
+      const requests = n.getRequestParam(vb, ustFlags, defaultNote);
+      const cacheIndex = n.getCacheIndex(vb);
+      requests.forEach((request, i) => {
+        if (request.resamp === undefined) return;
+        const key = resampCache.createKey(request.resamp);
+        if (!resampCache.checkKey(n.index, key)) {
+          LOG.debug(
+            `キャッシュ生成のために、既存のタスクのキャンセル。index:${n.index}`,
+            "EditorView"
+          );
+          synthesisWorker.clearTask(n.index);
+          LOG.debug(
+            `キャッシュ生成開始。index:${n.index}。i:${i}`,
+            "EditorView"
+          );
+          synthesisWorker.resamp(request, vb, cacheIndex[i]).catch((error) => {
+            LOG.error(
+              `キャッシュ生成の失敗。input:${JSON.stringify(
+                request.resamp
+              )},error:${error.message}\n${error.stack}}`,
+              "EditorView"
+            );
+          });
+        }
+      });
+    });
+  };
+  /**
+   * 楽譜の一部生成時の開始時間オフセットを計算
+   */
+  const getAudioTimeOffset = React.useCallback((): number => {
+    if (selectNotesIndex.length === 0) return 0;
+
+    const minIndex = Math.min(...selectNotesIndex);
+    if (minIndex < 0 || minIndex >= notesLeftMs.length) return 0;
+
+    // 選択されたノートの最初の時間（ミリ秒）を秒に変換
+    return (notesLeftMs[minIndex] - notes[minIndex].atPreutter) / 1000;
+  }, [selectNotesIndex, notesLeftMs]);
+
+  /** playとwavdownloadの共通処理 */
+  const synthesis = async (backgroundAudio?: {
+    wav: Wave;
+    offsetMs: number;
+    volume: number;
+    mute: boolean;
+  }) => {
+    if (!synthesisWorker.isReady) {
+      LOG.error("エンジンが起動していません", "EditorView");
+      synthesisWorker.reload();
+      snackBarStore.setSeverity("error");
+      snackBarStore.setValue(t("editor.workerError"));
+      snackBarStore.setOpen(true);
+      return;
+    }
+    LOG.info("wavファイル生成", "EditorView");
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSynthesisProgress(true);
+    LOG.info("wavファイル生成完了", "EditorView");
+    try {
+      setSynthesisCount(0);
+      const synthesisStartTime = Date.now();
+      const wavBuf = await synthesisWorker.synthesis(
+        selectNotesIndex,
+        setSynthesisCount,
+        backgroundAudio
+      );
+      LOG.gtag("synthesis", {
+        synthesisName: vb.name,
+        wavSize: wavBuf.byteLength,
+        synthesisTime: Date.now() - synthesisStartTime,
+        phonemizer: phonemizer.name,
+      });
+      const wavUrl_ = URL.createObjectURL(
+        new File([wavBuf], "temp.wav", { type: "audio/wav" })
+      );
+      setWavUrl(wavUrl_);
+      return wavUrl_;
+    } catch (e) {
+      LOG.error(`合成処理の失敗。${e.message}\n${e.stack}`, "EditorView");
+      snackBarStore.setSeverity("error");
+      snackBarStore.setValue(t("editor.synthesisError"));
+      snackBarStore.setOpen(true);
+      return undefined;
+    }
+  };
+
+  /**
+   * wavをダウンロードする際の動作
+   */
+  const handleDownload = async () => {
+    if (synthesisProgress) {
+      LOG.warn(
+        "handleDownload UI上クリックできないはず。何かがおかしい",
+        "EditorView"
+      );
+      return;
+    }
+    setPlayReady(false);
+    /**
+     * wavUrlは伴奏入りオーディオだが、ダウンロードしたいのは伴奏無しのため、
+     * backgroundAudioWavが存在する場合は、必ず再合成を行う。
+     * backgroundAudioWavが存在しない場合は、キャッシュされたwavUrlを利用するが、wavUrlが未生成の場合は再合成を行う。
+     */
+    const dataUrl = !backgroundAudioWav
+      ? wavUrl ?? (await synthesis())
+      : await synthesis();
+    setSynthesisProgress(false);
+    if (dataUrl !== undefined) {
+      LOG.gtag("download", { downloadName: vb.name });
+      // 合成処理に成功した場合のみ実行
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "output.wav";
+      a.click();
+    }
+  };
+
+  /**
+   * wavを生成し再生する処理
+   */
+  const handlePlay = async () => {
+    if (synthesisProgress) {
+      LOG.warn(
+        "handlePlay UI上クリックできないはず。何かがおかしい",
+        "EditorView"
+      );
+      return;
+    }
+    LOG.gtag("play", { playName: vb.name });
+    if (wavUrl !== undefined) {
+      LOG.info("再生開始", "EditorView");
+      setPlaying(true);
+      audioRef.current.play();
+    } else {
+      setPlayReady(true);
+      if (backgroundAudioWav) {
+        const realOffsetMs = getAudioTimeOffset() * 1000 - backgroundOffsetMs;
+        await synthesis({
+          wav: backgroundAudioWav,
+          offsetMs: realOffsetMs,
+          volume: backgroundVolume,
+          mute: backgroundMuted,
+        });
+      } else {
+        await synthesis();
+      }
+      setSynthesisProgress(false);
+    }
+  };
+
+  /**
+   * wavの再生を停止する処理
+   */
+  const handlePlayStop = () => {
+    LOG.debug("再生終了", "EditorView");
+    setPlaying(false);
+    if (audioRef.current !== null) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (backgroundAudioRef.current !== null) {
+      backgroundAudioRef.current.pause();
+      backgroundAudioRef.current.currentTime = 0;
+    }
+    setPlayingMs(0);
+  };
+
+  /**
+   * 再生にあわせてシークバーを動かす処理
+   *
+   * 頻繁に呼ばれる予定のためログは生成しない
+   */
+  const handleTimeUpdate = () => {
+    setPlayingMs(audioRef.current.currentTime * 1000);
+  };
+  React.useEffect(() => {
+    LOG.debug("wavUrlかplayReadyの更新を検知", "EditorView");
+    if (wavUrl !== undefined && playReady) {
+      LOG.info("再生開始", "EditorView");
+      setPlayReady(false);
+      setPlaying(true);
+      audioRef.current.play();
+    }
+  }, [wavUrl, playReady]);
+
+  /** 伴奏関係のデータが変更された際wavUrlを初期化する */
+  React.useEffect(() => {
+    LOG.debug("伴奏関係の設定変更を検知。wavUrlをクリア", "EditorView");
+    setWavUrl(undefined);
+  }, [
+    backgroundOffsetMs,
+    backgroundVolume,
+    backgroundMuted,
+    backgroundAudioWav,
+  ]);
+
+  /** 現在選択中のノート部分に対して、伴奏のみを再生する処理 */
+  const playBackgroundAudio = () => {
+    LOG.info("伴奏のみ再生処理開始", "EditorView");
+    // backgroundAudioRefが存在しない場合何もしない
+    if (backgroundAudioRef.current === null) return;
+    // ノートを選択していない場合何もしない
+    if (selectNotesIndex.length === 0) return 0;
+    /** 選択範囲の最小インデックス */
+    const minIndex = Math.min(...selectNotesIndex);
+    /** 選択範囲の最大インデックス */
+    const maxIndex = Math.max(...selectNotesIndex);
+    if (minIndex < 0 || minIndex >= notesLeftMs.length) return 0;
+    /** 選択されたノートの最初の時間 */
+    const noteOffsetMs = notesLeftMs[minIndex] - notes[minIndex].atPreutter;
+    /** 選択されたノートの終了時間*/
+    const noteEndMs = notesLeftMs[maxIndex] + notes[maxIndex].msLength;
+    /** 再生開始時間、0でクランプ */
+    const playStartMs = Math.max(0, noteOffsetMs - backgroundOffsetMs);
+    /** 再生終了時間、オーディオ長でクランプ */
+    const playEndMs = Math.min(
+      noteEndMs - backgroundOffsetMs,
+      (backgroundAudioRef.current.duration ?? Infinity) * 1000
+    );
+    LOG.debug(`再生範囲: ${playStartMs} ms から ${playEndMs} ms`, "EditorView");
+    setBackgroundPlayEndMs(playEndMs);
+    // 再生時間をセット
+    backgroundAudioRef.current.currentTime = playStartMs / 1000;
+    // 音量セット
+    backgroundAudioRef.current.volume = backgroundVolume;
+    // 単体再生のため必ずミュート解除
+    backgroundAudioRef.current.muted = false;
+    // 再生
+    backgroundAudioRef.current.play();
+    setPlaying(true);
+  };
+
+  /** ノートの末尾から、指定時間伴奏を再生する処理 */
+  const playBackgroundAudioFromNotesEnd = () => {
+    // backgroundAudioRefが存在しない場合何もしない
+    if (backgroundAudioRef.current === null) return;
+
+    const lastNoteIndex = notes.length - 1;
+    /** 再生開始時間=最後のノートの末尾。notes.length===0の場合は0 */
+    const playStartMs =
+      notes.length === 0
+        ? 0
+        : notesLeftMs[lastNoteIndex] + notes[lastNoteIndex].msLength;
+    /** 小節数`backgroundPlayDuration`とBPM`notes[lastNoteIndex].tempo`を使って再生時間(ms)を求める。 */
+    const backgroundPlayDurationMs =
+      backgroundPlayDuration * (60000 / notes[lastNoteIndex].tempo) * 4;
+    // 再生終了時間 playStartMs + backgroundPlayDurationMs、オーディオ長でクランプ
+    const playEndMs = Math.min(
+      playStartMs + backgroundPlayDurationMs,
+      (backgroundAudioRef.current.duration ?? Infinity) * 1000
+    );
+    LOG.debug(`再生範囲: ${playStartMs} ms から ${playEndMs} ms`, "EditorView");
+    setBackgroundPlayEndMs(playEndMs);
+    // 再生時間をセット
+    backgroundAudioRef.current.currentTime = playStartMs / 1000;
+    // 音量セット
+    backgroundAudioRef.current.volume = backgroundVolume;
+    // 単体再生のため必ずミュート解除
+    backgroundAudioRef.current.muted = false;
+    // 再生
+    backgroundAudioRef.current.play();
+    setPlaying(true);
+  };
+
+  /** バックグラウンドaudioの更新を検知し、終了時間を超えたら停止する処理 */
+  const handleBackgroundAudioTimeUpdate = () => {
+    setPlayingMs(backgroundAudioRef.current.currentTime * 1000);
+    if (backgroundAudioRef.current.currentTime * 1000 >= backgroundPlayEndMs) {
+      LOG.debug(
+        `伴奏再生終了。終了時間: ${
+          backgroundAudioRef.current.currentTime * 1000
+        } ms`,
+        "EditorView"
+      );
+      backgroundAudioRef.current.pause();
+      setPlaying(false);
+      setPlayingMs(0);
+    }
+  };
+
+  return (
+    <>
+      <Pianoroll
+        playing={playing}
+        playingMs={playingMs}
+        selectedNotesIndex={selectNotesIndex}
+        setSelectedNotesIndes={setSelectNotesIndex}
+        selectMode={selectMode}
+        pitchTargetIndex={pitchTargetIndex}
+        setPitchTargetIndex={setPitchTargetIndex}
+        lyricTargetIndex={lyricTargetIndex}
+        setLyricTargetIndex={setLyricTargetIndex}
+        setTargetPoltament={setTargetPoltament}
+        targetPoltament={targetPoltament}
+        addNoteLength={addNoteLength}
+        addNoteLyric={addNoteLyric}
+        setNotesLeftMs={setNotesLeftMs}
+        backgroundAudioWav={backgroundAudioWav}
+        backgroundWavOffsetMs={backgroundOffsetMs}
+      />
+      <br />
+      <br />
+      <FooterMenu
+        selectedNotesIndex={selectNotesIndex}
+        setSelectedNotesIndex={setSelectNotesIndex}
+        handlePlay={handlePlay}
+        handleDownload={handleDownload}
+        synthesisCount={synthesisCount}
+        synthesisProgress={synthesisProgress}
+        playing={playing}
+        handlePlayStop={handlePlayStop}
+        selectMode={selectMode}
+        setSelectMode={setSelectMode}
+        backgroundAudioWav={backgroundAudioWav}
+        setBackgroundAudioWav={setBackgroundAudioWav}
+        backgroundWavUrl={backgroundWavUrl}
+        setBackgroundWavUrl={setBackgroundWavUrl}
+        backgroundOffsetMs={backgroundOffsetMs}
+        setBackgroundOffsetMs={setBackgroundOffsetMs}
+        backgroundVolume={backgroundVolume}
+        setBackgroundVolume={setBackgroundVolume}
+        backgroundMuted={backgroundMuted}
+        setBackgroundMuted={setBackgroundMuted}
+        playBackgroundAudio={playBackgroundAudio}
+        playBackgroundAudioFromNotesEnd={playBackgroundAudioFromNotesEnd}
+        setBackgroundPlayDuration={setBackgroundPlayDuration}
+      />
+      {selectMode === "pitch" && (
+        <PitchPortal
+          targetIndex={targetPoltament}
+          note={notes[pitchTargetIndex]}
+        />
+      )}
+
+      {selectMode === "add" && (
+        <AddNotePortal
+          addNoteLength={addNoteLength}
+          addNoteLyric={addNoteLyric}
+          setAddNoteLength={setAddNoteLength}
+          setAddNoteLyric={setAddNoteLyric}
+        />
+      )}
+      {wavUrl !== undefined && (
+        <>
+          <audio
+            src={wavUrl}
+            ref={audioRef}
+            data-testid="audio"
+            onEnded={handlePlayStop}
+            onTimeUpdate={handleTimeUpdate}
+          ></audio>
+        </>
+      )}
+      {backgroundWavUrl !== undefined && (
+        <>
+          <audio
+            src={backgroundWavUrl}
+            ref={backgroundAudioRef}
+            data-testid="background-audio"
+            onEnded={() => setPlaying(false)}
+            onTimeUpdate={handleBackgroundAudioTimeUpdate}
+          ></audio>
+        </>
+      )}
+    </>
+  );
+};
+
+export const CheckWorkerReady = (synthesisWorker: SynthesisWorker): boolean => {
+  return synthesisWorker.workersPool.workers.every(
+    (w) => w.worker.isReady !== true
+  );
+};
