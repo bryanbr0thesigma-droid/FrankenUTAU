@@ -575,6 +575,7 @@ export const translationEn = {
     default: "No Conversion",
     JPCVorVCVPhonemizer: "(Japanese) Automatic VCV",
     RomajiJPCVorVCVPhonemizer: "(Japanese) Romaji Automatic VCV",
+    EnglishVCCVPhonemizer: "(English) VCCV / VCV",
     JPAutoPhonemizer: "(Japanese) Automatic VCV(with CVVC)",
     RomajiJPAutoPhonemizer: "(Japanese) Romaji Automatic VCV(with CVVC)",
     JPPresampPhonemizer: "(Japanese) presamp-compliant (in development)",

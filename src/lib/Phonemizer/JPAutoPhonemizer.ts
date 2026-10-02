@@ -23,7 +23,7 @@ const vowelO =
 const vowelN = /ん$/;
 const CVVowels = /^[あいうえおん]$/;
 
-interface ConsonantParam {
+export interface ConsonantParam {
   /** 子音要素のエイリアス */
   consonant: string;
   /** 子音要素に対応する単独音エイリアスの種類 */

@@ -33,8 +33,9 @@ export const FooterPhonemizerMenu: React.FC<FooterPhonemizerMenuProps> = (
 
   const handleClick = (p: new () => BasePhonemizer) => {
     const newPhonemizer = new p();
-    setPhonemizer(newPhonemizer);
     props.handleClose();
+    // 辞書などが必要なphonemizerは、読込完了後に切り替える
+    newPhonemizer.load().then(() => setPhonemizer(newPhonemizer));
   };
   return (
     <Menu

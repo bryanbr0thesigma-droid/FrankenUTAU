@@ -18,6 +18,14 @@ export abstract class BasePhonemizer {
   constructor() {}
 
   /**
+   * phonemizerが辞書などの外部データを必要とする場合、ここで読み込む。
+   * メニューで選択された時点で呼ばれる。既定では何もしない。
+   */
+  load(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
    * 合成に必要なパラメータを返す処理のphonemizer固有の実装部分
    * @param vb UTAU音源
    * @param note 合成するノート

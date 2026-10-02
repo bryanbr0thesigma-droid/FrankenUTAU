@@ -61,9 +61,16 @@ export default defineConfig(() => {
                 // clients.claim() を呼んで、既存タブにもすぐ新 SW を適用
                 clientsClaim: true,
                 maximumFileSizeToCacheInBytes: 4.5 * 1024 * 1024,
+                // 英語辞書は大きいので事前キャッシュせず、初回利用時にキャッシュする
+                globIgnores: ["**/dict/**"],
                 // Storybookパスを除外
                 navigateFallbackDenylist: [/^\/utalet\/storybook/],
                 runtimeCaching: [
+                  {
+                    urlPattern: ({ url }) => url.pathname.includes("/dict/"),
+                    handler: "CacheFirst",
+                    options: { cacheName: "dict-cache" },
+                  },
                   {
                     // Storybookパスを除外してキャッシュ
                     urlPattern: ({ url }) => {

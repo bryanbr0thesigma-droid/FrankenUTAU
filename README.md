@@ -13,6 +13,14 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
 - Load a UTAU voicebank (zip), edit notes, render and download audio — all in the browser.
 - Open `.ust` **and OpenUtau `.ustx`** projects (notes, lyrics, pitch, tempo changes, vibrato).
 - Japanese CV and VCV voicebanks: the default phonemizer picks `- あ` / `a い` style VCV aliases and falls back to CV (other phonemizers: Auto, Presamp, Romaji, in the Phonemizer menu).
+- **English VCCV / VCV voicebanks** (phonemizer "(English) VCCV / VCV"): a port of the alias
+  conventions of OpenUtau's *English VCCV Phonemizer* (`-ba`, `ba`, `a b`, `at-`, `aa`; CZ-SAMPA
+  symbols), using CMUdict (`public/dict/cmudict-en.txt`, loaded on first use, then cached offline).
+  Type a word on its first note and `+` on the notes for further syllables, e.g. `hello` `+`.
+  Use `[hh ah l ow]` to give ARPAbet pronunciations, and `!alias` to force an exact alias.
+  Differences from OpenUtau: one CV plus one trailing VC per note (consonant clusters are
+  simplified to the first and last consonant), no ConVel, no YAML dictionary/replacement files,
+  and unknown words use a crude spelling-based guess instead of OpenUtau's neural G2P.
 - Save as `.ust` or `.ustx` (opens in OpenUtau).
 - Not carried over from `.ustx`: OpenUtau expressions, phonemizer overrides, extra tracks, curves.
 

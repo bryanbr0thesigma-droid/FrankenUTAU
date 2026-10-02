@@ -562,6 +562,7 @@ export const translationZh = {
     default: "无转换",
     JPCVorVCVPhonemizer: "（日语）自动连续音",
     RomajiJPCVorVCVPhonemizer: "（日语）罗马字自动连续音",
+    EnglishVCCVPhonemizer: "（英语）VCCV / 连续音",
     JPAutoPhonemizer: "（日语）自动连续音（CVVC支持）",
     RomajiJPAutoPhonemizer: "（日语）罗马字自动连续音（CVVC支持）",
     JPPresampPhonemizer: "（日语）presamp规范（开发中）",
