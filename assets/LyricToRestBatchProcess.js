@@ -1,0 +1,1 @@
+import{B as t}from"./index.js";class a extends t{title="batchprocess.lyricTorestBatchProcess.title";summary="lyric:歌詞を休符に一括変更";_process(r){const e=r.map(s=>s.deepCopy());return e.map(s=>s.lyric="R"),e}}export{a as LyricTorestBatchProcess};

@@ -1,0 +1,1 @@
+import{B as r}from"./index.js";class a extends r{title="batchprocess.applyOtoBatchProcess.title";summary="timing:原音設定値を適用";_process(o){const e=o.map(t=>t.deepCopy());return e.forEach(t=>{t.oto&&(t.preutter=t.otoPreutter??0,t.overlap=t.otoOverlap??0)}),e}}export{a as ApplyOtoBatchProcess};

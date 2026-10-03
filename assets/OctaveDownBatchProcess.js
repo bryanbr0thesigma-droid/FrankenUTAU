@@ -1,0 +1,1 @@
+import{B as t}from"./index.js";class n extends t{title="batchprocess.octaveDown";summary="notenum:1オクターブ下げる";_process(s){const o=s.map(e=>e.deepCopy());return o.forEach(e=>e.notenum=e.notenum-12),o}}export{n as OctaveDownBatchProcess};

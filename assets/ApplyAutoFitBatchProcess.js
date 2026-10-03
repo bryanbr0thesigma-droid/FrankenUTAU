@@ -1,0 +1,1 @@
+import{B as s}from"./index.js";class o extends s{title="batchprocess.applyAutoFitBatchProcess.title";summary="timing:自動調整結果を適用";_process(r){const e=r.map(t=>t.deepCopy());return e.forEach(t=>{t.lyric!=="R"&&(t.stp=t.atStp??0,t.preutter=t.atPreutter??0,t.overlap=t.atOverlap??0)}),e}}export{o as ApplyAutoFitBatchProcess};
