@@ -41,3 +41,10 @@ Node 20+. See `README.upstream-utalet.md` for the upstream project's notes.
 
 ## Roadmap ideas
 Port OpenUtau phonemizers, pitch/expression curves from USTX, and multi-track import.
+
+## Using it without uploading anything
+Everything runs in your browser: voicebanks, projects and rendered audio stay on your computer.
+Run it locally (`npm run dev`, or serve `dist/` after `npm run build`), or publish `dist/` as a static
+site. `.github/workflows/build.yml` deploys it to GitHub Pages whenever `main` is pushed
+(enable Pages from the `gh-pages` branch in the repository settings).
+The upstream Google Analytics tag was removed; the app sends no usage data.
