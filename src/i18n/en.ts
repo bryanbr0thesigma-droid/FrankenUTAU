@@ -576,6 +576,7 @@ export const translationEn = {
     JPCVorVCVPhonemizer: "(Japanese) Automatic VCV",
     RomajiJPCVorVCVPhonemizer: "(Japanese) Romaji Automatic VCV",
     EnglishVCCVPhonemizer: "(English) VCCV / VCV",
+    EnglishARPAbetPhonemizer: "(English) ARPAbet diphone (e.g. CASE)",
     JPAutoPhonemizer: "(Japanese) Automatic VCV(with CVVC)",
     RomajiJPAutoPhonemizer: "(Japanese) Romaji Automatic VCV(with CVVC)",
     JPPresampPhonemizer: "(Japanese) presamp-compliant (in development)",

@@ -33,10 +33,15 @@ const arpaToVccv: Record<string, string> = {
   jh: "j",
   dx: "dd",
 };
-const vowelSymbols = new Set(
-  "a @ u 9 8 I e 3 A i E O Q 6 o".split(" ")
+/** 音素体系。vccvはCZ-SAMPA風、arpaはARPAbetそのまま */
+export type PhonemeScheme = "vccv" | "arpa";
+
+const vccvVowels = new Set("a @ u 9 8 I e 3 A i E O Q 6 o".split(" "));
+const arpaVowels = new Set(
+  "aa ae ah ao aw ay eh er ey ih iy ow oy uh uw".split(" ")
 );
-export const isVowel = (s: string): boolean => vowelSymbols.has(s);
+export const isVowel = (s: string, scheme: PhonemeScheme = "vccv"): boolean =>
+  (scheme === "arpa" ? arpaVowels : vccvVowels).has(s);
 
 let dict: Map<string, string[]> | undefined;
 let loading: Promise<void> | undefined;
@@ -111,9 +116,12 @@ const spellToArpa = (word: string): string[] => {
 };
 
 /**
- * 単語またはARPAbetヒント(`[hh ah l ow]`)をVCCV音素列にする。変換できなければnull。
+ * 単語またはARPAbetヒント(`[hh ah l ow]`)を音素列にする。変換できなければnull。
  */
-export const wordToSymbols = (lyric: string): string[] | null => {
+export const wordToSymbols = (
+  lyric: string,
+  scheme: PhonemeScheme = "vccv"
+): string[] | null => {
   const hint = /^\[([a-z ]+)\]$/i.exec(lyric.trim());
   let arpa: string[];
   if (hint) {
@@ -123,12 +131,13 @@ export const wordToSymbols = (lyric: string): string[] | null => {
     if (word === "" || word !== lyric.toLowerCase().trim()) return null;
     arpa = dict?.get(word) ?? spellToArpa(word);
   }
-  const syms = arpa.map((p) => arpaToVccv[p] ?? p);
-  return syms.some(isVowel) ? syms : null;
+  const syms =
+    scheme === "arpa" ? arpa : arpa.map((p) => arpaToVccv[p] ?? p);
+  return syms.some((p) => isVowel(p, scheme)) ? syms : null;
 };
 
 const stopsAndFricatives = new Set(
-  "p b t d k g f v th dh sh ch j".split(" ")
+  "p b t d k g f v th dh sh ch j jh".split(" ")
 );
 const glides = new Set(["l", "r", "w", "y"]);
 
@@ -151,11 +160,14 @@ const legalOnset = (cs: string[]): boolean => {
 };
 
 /** 音素列を音節に分割する(最大onset原則) */
-export const syllabify = (syms: string[]): Syllable[] => {
+export const syllabify = (
+  syms: string[],
+  scheme: PhonemeScheme = "vccv"
+): Syllable[] => {
   const syls: Syllable[] = [];
   let cs: string[] = [];
   for (const s of syms) {
-    if (!isVowel(s)) {
+    if (!isVowel(s, scheme)) {
       cs.push(s);
       continue;
     }
@@ -174,7 +186,10 @@ export const syllabify = (syms: string[]): Syllable[] => {
 };
 
 /** 単語を音節にする。英単語として扱えなければnull */
-export const wordToSyllables = (lyric: string): Syllable[] | null => {
-  const syms = wordToSymbols(lyric);
-  return syms ? syllabify(syms) : null;
+export const wordToSyllables = (
+  lyric: string,
+  scheme: PhonemeScheme = "vccv"
+): Syllable[] | null => {
+  const syms = wordToSymbols(lyric, scheme);
+  return syms ? syllabify(syms, scheme) : null;
 };

@@ -13,6 +13,12 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
 - Load a UTAU voicebank (zip), edit notes, render and download audio — all in the browser.
 - Open `.ust` **and OpenUtau `.ustx`** projects (notes, lyrics, pitch, tempo changes, vibrato).
 - Japanese CV and VCV voicebanks: the default phonemizer picks `- あ` / `a い` style VCV aliases and falls back to CV (other phonemizers: Auto, Presamp, Romaji, in the Phonemizer menu).
+- **English ARPAbet diphone banks such as CASE** (phonemizer "(English) ARPAbet diphone"): aliases
+  like `- ay`, `t ay`, `ay k`, `ey ay`, `ay -`, bare `ay`; alternate takes (`t ay1`...) are used when the
+  plain alias is missing. Same lyric input as below. Checked against CASE's `oto.ini`
+  (`__tests__/fixtures/case-oto.txt`, alias names and timings only): about 1.6% of syllables in a
+  sample of 3,000 dictionary words had no matching CV alias. Phrase-initial `- C` and `C C`
+  pieces are not used.
 - **English VCCV / VCV voicebanks** (phonemizer "(English) VCCV / VCV"): a port of the alias
   conventions of OpenUtau's *English VCCV Phonemizer* (`-ba`, `ba`, `a b`, `at-`, `aa`; CZ-SAMPA
   symbols), using CMUdict (`public/dict/cmudict-en.txt`, loaded on first use, then cached offline).

@@ -592,6 +592,7 @@ export const translationJa = {
     JPCVorVCVPhonemizer: "(日本語)自動連続音",
     RomajiJPCVorVCVPhonemizer: "(日本語)ローマ字自動連続音",
     EnglishVCCVPhonemizer: "(英語)VCCV・連続音",
+    EnglishARPAbetPhonemizer: "(英語)ARPAbetダイフォン (CASEなど)",
     JPAutoPhonemizer: "(日本語)自動連続音(CVVC対応)",
     RomajiJPAutoPhonemizer: "(日本語)ローマ字自動連続音(CVVC対応)",
     JPPresampPhonemizer: "(日本語)presamp準拠(開発中)",

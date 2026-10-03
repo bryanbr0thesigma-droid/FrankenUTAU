@@ -599,6 +599,7 @@ export const translationPt = {
     JPCVorVCVPhonemizer: "(Japonês) VCV automático",
     RomajiJPCVorVCVPhonemizer: "(Japonês) VCV automático em romaji",
     EnglishVCCVPhonemizer: "(Inglês) VCCV / VCV",
+    EnglishARPAbetPhonemizer: "(Inglês) ARPAbet difone (ex. CASE)",
     JPAutoPhonemizer: "(Japonês) VCV automático (com suporte a CVVC)",
     RomajiJPAutoPhonemizer:
       "(Japonês) VCV automático em romaji (com suporte a CVVC)",

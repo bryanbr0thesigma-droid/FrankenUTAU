@@ -1,0 +1,238 @@
+/**
+ * 英語phonemizerの共通実装。1ノート=CV+末尾VCというこのエンジンの構造に合わせて、
+ * 単語を音節に分け、ノートごとにCVと末尾VCのエイリアスを選ぶ。
+ * 音素体系ごとのエイリアス規則は、サブクラスの`cvCandidates`と`vcCandidates`で与える。
+ *
+ * 歌詞の入力方法はOpenUtauと同じ。
+ * - 単語を先頭のノートに書き、続く音節のノートには`+`と書く。
+ * - `[hh ah l ow]`のようにARPAbetで発音を直接指定できる。
+ * - `!`を含む歌詞や英単語として解釈できない歌詞は、エイリアスとしてそのまま検索する。
+ */
+import type OtoRecord from "utauoto/dist/OtoRecord";
+import type { ConsonantParam } from "../Phonemizer/JPAutoPhonemizer";
+import { JPAutoPhonemizer } from "../Phonemizer/JPAutoPhonemizer";
+import { Note } from "../Note";
+import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
+import {
+  loadEnglishDict,
+  wordToSyllables,
+  type PhonemeScheme,
+  type Syllable,
+} from "./EnglishG2p";
+
+/** CVエイリアスの候補。leadは、直前ノート末尾のVCが担当すべき子音 */
+export type CvCandidate = { alias: string; lead: string | null };
+
+export type CvContext = {
+  onset: string[];
+  v: string;
+  /** 音節を持たない延長ノート(`+`が音節数を超えた分) */
+  isExt: boolean;
+  /** 直前ノートの母音。フレーズの先頭ならnull */
+  prevV: string | null;
+};
+
+type NoteInfo = { lead: string | null };
+
+const stops = new Set(["b", "d", "g", "k", "p", "t", "dd", "dx", "q", "ch", "j", "jh"]);
+
+const isPlus = (n: Note | undefined) =>
+  n !== undefined && n.lyric !== undefined && n.lyric.startsWith("+");
+
+/** 母音で終わる語尾を表す、末尾VCの擬似子音 */
+export const VOWEL_END = "-";
+
+export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
+  protected abstract readonly scheme: PhonemeScheme;
+  /** 語尾の母音を`a -`のようなエイリアスで閉じる音源か */
+  protected readonly closesVowels: boolean = false;
+
+  /** noteのCVエイリアス候補を優先順に返す */
+  protected abstract cvCandidates(ctx: CvContext): CvCandidate[];
+  /**
+   * 母音prevから子音cへ繋ぐVCエイリアスの候補を優先順に返す。
+   * @param ending 語尾の子音(直後が休符)か。cがVOWEL_ENDなら母音で終わる語尾
+   */
+  protected abstract vcCandidates(
+    prev: string,
+    c: string,
+    ending: boolean
+  ): string[];
+
+  private info = new WeakMap<Note, NoteInfo>();
+  private sylCache = new Map<string, Syllable[] | null>();
+
+  /** 英語辞書を読み込む。辞書がなくても規則ベースで動作する。 */
+  load(): Promise<void> {
+    return loadEnglishDict();
+  }
+
+  private syllablesOf(lyric: string): Syllable[] | null {
+    if (!this.sylCache.has(lyric)) {
+      this.sylCache.set(lyric, wordToSyllables(lyric, this.scheme));
+    }
+    return this.sylCache.get(lyric)!;
+  }
+
+  /** ノートが担当する音節を返す。英語として扱えないノート(休符など)はnull */
+  protected syllableOf(note: Note | undefined): {
+    syl: Syllable;
+    hasCoda: boolean;
+    isExt: boolean;
+    atWordEnd: boolean;
+  } | null {
+    if (!note || note.lyric === undefined || note.lyric.includes("!")) {
+      return null;
+    }
+    let head = note;
+    let k = 0;
+    while (isPlus(head) && head.prev) {
+      head = head.prev;
+      k++;
+    }
+    if (isPlus(head) || head.lyric === "R" || head.lyric.includes("!")) {
+      return null;
+    }
+    const syls = this.syllablesOf(head.lyric);
+    if (!syls || syls.length === 0) return null;
+    let m = 1;
+    for (let n = head.next; isPlus(n); n = n.next) m++;
+    const last = syls.length - 1;
+    const j = Math.min(k, last);
+    const isExt = k > last;
+    const hasCoda = j < last ? k === j : k === m - 1;
+    const atWordEnd = j === last && k === m - 1;
+    return { syl: syls[j], hasCoda, isExt, atWordEnd };
+  }
+
+  protected _getLastPhoneme(note: Note | undefined, vb: BaseVoiceBank): string {
+    const s = this.syllableOf(note);
+    return s ? s.syl.v : "-";
+  }
+
+  /** 音源にあるエイリアスを探す。無ければ`alias1`〜`alias9`(別テイク)も試す */
+  protected findRecord(
+    vb: BaseVoiceBank,
+    alias: string,
+    notenum: number,
+    color: string
+  ): OtoRecord | null {
+    const base = vb.getOtoRecord(alias, notenum, color);
+    if (base) return base;
+    for (let i = 1; i <= 9; i++) {
+      const r = vb.getOtoRecord(alias + i, notenum, color);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  protected _applyOto(note: Note, vb: BaseVoiceBank): void {
+    if (note.lyric === undefined) {
+      throw new Error("lyric is not initial.");
+    } else if (note.notenum === undefined) {
+      throw new Error("notenum is not initial.");
+    }
+    const color = note.voiceColor ? note.voiceColor : "";
+    let record: OtoRecord | null = null;
+    let lead: string | null = null;
+    const cur = this.syllableOf(note);
+    if (cur) {
+      const prevS = this.syllableOf(note.prev);
+      const cands = this.cvCandidates({
+        onset: cur.syl.onset,
+        v: cur.syl.v,
+        isExt: cur.isExt,
+        prevV: prevS ? prevS.syl.v : null,
+      });
+      for (const c of cands) {
+        record = this.findRecord(vb, c.alias, note.notenum, color);
+        if (record) {
+          lead = c.lead;
+          break;
+        }
+      }
+    } else if (note.lyric !== "R") {
+      record = vb.getOtoRecord(note.lyric.replace("!", ""), note.notenum, color);
+    }
+    this.info.set(note, { lead });
+    if (record === null || record === undefined) {
+      note.oto = undefined;
+      note.otoPreutter = 0;
+      note.otoOverlap = 0;
+      note.atAlias = "R";
+      note.atFilename = "";
+    } else {
+      note.oto = record;
+      note.otoPreutter = record.pre;
+      note.otoOverlap = record.overlap;
+      note.atAlias = record.alias !== "" ? record.alias : note.lyric;
+      note.atFilename =
+        record.dirpath + (record.dirpath !== "" ? "/" : "") + record.filename;
+    }
+  }
+
+  /**
+   * noteの末尾に置くVCが担当する子音を返す。
+   * 末尾子音(coda)があればそれを、なければ次のノートのCVの前に必要な子音を返す。
+   * 語尾のcodaは`-`付き(例: `t-`)で返す。語尾の母音はVOWEL_ENDで返す(closesVowelsの音源のみ)。
+   * @param next VCを置くノートの次のノート
+   */
+  getNextConsonant(next: Note): ConsonantParam | null {
+    const owner = next?.prev;
+    const cur = this.syllableOf(owner);
+    if (!owner || !cur) return null;
+    const nextIsSyllable = this.syllableOf(next) !== null;
+    let consonant: string | null = null;
+    let ending = false;
+    if (cur.hasCoda && cur.syl.coda.length > 0) {
+      consonant = cur.syl.coda[0];
+      ending = !nextIsSyllable;
+    } else if (nextIsSyllable) {
+      consonant = this.info.get(next)?.lead ?? null;
+    } else if (this.closesVowels && cur.atWordEnd && next.lyric === "R") {
+      return {
+        consonant: VOWEL_END,
+        cvs: [],
+        type: "value",
+        lengthValue: 150,
+        crossfade: false,
+      };
+    }
+    if (!consonant) return null;
+    return {
+      consonant: ending ? `${consonant}-` : consonant,
+      cvs: [],
+      type: ending ? "value" : stops.has(consonant) ? "stretch" : "preutter",
+      lengthValue: stops.has(consonant) ? 80 : 120,
+      crossfade: !ending && !stops.has(consonant),
+    };
+  }
+
+  protected getOtoRecord(
+    vb,
+    prevPhoneme,
+    lyric,
+    notenum,
+    voiceColor,
+    vcMode: boolean = false
+  ): OtoRecord | null {
+    if (lyric === "") return null;
+    if (!vcMode) return vb.getOtoRecord(lyric, notenum, voiceColor);
+    const ending = lyric !== VOWEL_END && lyric.endsWith("-");
+    const c = ending ? lyric.slice(0, -1) : lyric;
+    for (const a of this.vcCandidates(prevPhoneme, c, ending)) {
+      const r = this.findRecord(vb, a, notenum, voiceColor);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  getVCTargetLength(
+    note: Note,
+    vcOtoRecord: OtoRecord,
+    consonantParam: ConsonantParam
+  ): number {
+    if (!note.next?.oto) return consonantParam.lengthValue;
+    return super.getVCTargetLength(note, vcOtoRecord, consonantParam);
+  }
+}
