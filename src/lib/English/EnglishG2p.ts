@@ -115,6 +115,22 @@ const spellToArpa = (word: string): string[] => {
   return out;
 };
 
+/** ローマ字風の子音+母音(`ku`, `ba`, `shi`など)。辞書にない綴りに使う */
+const romajiConsonants: Record<string, string[]> = {
+  k: ["k"], g: ["g"], s: ["s"], z: ["z"], t: ["t"], d: ["d"], n: ["n"],
+  h: ["hh"], b: ["b"], p: ["p"], m: ["m"], r: ["r"], y: ["y"], w: ["w"],
+  f: ["f"], v: ["v"], l: ["l"], j: ["jh"], sh: ["sh"], ch: ["ch"],
+  th: ["th"], dh: ["dh"], ng: ["ng"], zh: ["zh"],
+};
+const romajiVowels: Record<string, string> = {
+  a: "aa", i: "iy", u: "uw", e: "eh", o: "ow",
+};
+const romajiSyllable = (word: string): string[] | null => {
+  const m = /^(sh|ch|th|dh|ng|zh|[kgsztdnhbpmrywfvlj])?([aiueo])$/.exec(word);
+  if (!m) return null;
+  return [...(m[1] ? romajiConsonants[m[1]] : []), romajiVowels[m[2]]];
+};
+
 /**
  * 単語またはARPAbetヒント(`[hh ah l ow]`)を音素列にする。変換できなければnull。
  */
@@ -129,7 +145,13 @@ export const wordToSymbols = (
   } else {
     const word = lyric.toLowerCase().replace(/[^a-z']/g, "");
     if (word === "" || word !== lyric.toLowerCase().trim()) return null;
-    arpa = dict?.get(word) ?? spellToArpa(word);
+    const entry = dict?.get(word);
+    const romaji = romajiSyllable(word);
+    // `ba`のようにCMUdictが文字の読み(b iy ey)を持つ短い綴りは、ローマ字読みを優先する
+    const oneSyllable =
+      entry !== undefined &&
+      entry.filter((p) => isVowel(p, "arpa")).length === 1;
+    arpa = (oneSyllable ? entry : romaji ?? entry ?? spellToArpa(word))!;
   }
   const syms =
     scheme === "arpa" ? arpa : arpa.map((p) => arpaToVccv[p] ?? p);

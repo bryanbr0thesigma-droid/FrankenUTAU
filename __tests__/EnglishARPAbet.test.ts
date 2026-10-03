@@ -87,3 +87,22 @@ describe("EnglishARPAbetPhonemizer with CASE aliases", () => {
     }
   });
 });
+
+describe("romaji-style syllables and voicebank detection", () => {
+  it("reads ku / ba / shi as one consonant+vowel syllable", () => {
+    const out = sing(["ku", "ba", "shi", "R"]);
+    expect(out[0][0]).toBe("k uw");
+    expect(out[1][0]).toMatch(/^b aa\d*$/);
+    expect(out[2][0]).toMatch(/^sh iy\d*$/);
+  });
+  it("detects an ARPAbet diphone bank, but not a Japanese one", async () => {
+    const { isArpabetDiphoneBank } = await import("../src/lib/English/detectScheme");
+    expect(isArpabetDiphoneBank(vb)).toBe(true);
+    expect(isArpabetDiphoneBank({ getOtoRecord: (a: string) => (["あ", "ka"].includes(a) ? {} : null) } as any)).toBe(false);
+  });
+  it("accepts exact aliases typed with a space", () => {
+    const out = sing(["k ae", "ae t", "R"]);
+    expect(out[0][0]).toBe("k ae");
+    expect(out[1][0]).toBe("ae t");
+  });
+});

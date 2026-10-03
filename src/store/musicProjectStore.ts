@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { BasePhonemizer } from "../lib/BasePhonemizer";
 import { dumpNotes, Note } from "../lib/Note";
+import { isArpabetDiphoneBank } from "../lib/English/detectScheme";
+import { EnglishARPAbetPhonemizer } from "../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { JPCVorVCVPhonemizer } from "../lib/Phonemizer/JPCVorVCVPhonemizer";
 import { Ust } from "../lib/Ust";
 import { BaseVoiceBank } from "../lib/VoiceBanks/BaseVoiceBank";
@@ -132,7 +134,14 @@ export const useMusicProjectStore = create<MusicProjectStore>()(
       isMinor: false,
       isShowPortrait: true,
       setUst: (ust) => set({ ust }),
-      setVb: (vb) => set({ vb }),
+      setVb: (vb) => {
+        set({ vb });
+        // ARPAbetダイフォン音源(CASEなど)は、英語phonemizerを自動で選ぶ
+        if (isArpabetDiphoneBank(vb)) {
+          const p = new EnglishARPAbetPhonemizer();
+          p.load().then(() => get().setPhonemizer(p));
+        }
+      },
 
       setUstTempo: (tempo) =>
         set((state) => {
@@ -239,9 +248,10 @@ export const useMusicProjectStore = create<MusicProjectStore>()(
           const updatedNotes = [...state.notes];
           updatedNotes.forEach((n) => {
             n.phonemizer = newPhonemizer;
-            n.applyOto(state.vb);
+            if (state.vb) n.applyOto(state.vb);
           });
-          state.ust.notes = updatedNotes;
+          // 楽譜を読み込む前(音源読込時の自動選択など)はustがnull
+          if (state.ust) state.ust.notes = updatedNotes;
           return { phonemizer: newPhonemizer, notes: updatedNotes };
         }),
       setTone: (tone) => set({ tone }),

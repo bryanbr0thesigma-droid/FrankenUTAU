@@ -15,7 +15,9 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
 - Japanese CV and VCV voicebanks: the default phonemizer picks `- あ` / `a い` style VCV aliases and falls back to CV (other phonemizers: Auto, Presamp, Romaji, in the Phonemizer menu).
 - **English ARPAbet diphone banks such as CASE** (phonemizer "(English) ARPAbet diphone"): aliases
   like `- ay`, `t ay`, `ay k`, `ey ay`, `ay -`, bare `ay`; alternate takes (`t ay1`...) are used when the
-  plain alias is missing. Same lyric input as below. Checked against CASE's `oto.ini`
+  plain alias is missing. Selected automatically when such a bank is loaded. Same lyric input as below, plus bare
+  consonant+vowel syllables like `ku`, `ba`, `shi` (read as `k uw`, `b aa`, `sh iy`), and exact aliases typed
+  with a space (`ay k`). Checked against CASE's `oto.ini`
   (`__tests__/fixtures/case-oto.txt`, alias names and timings only): about 1.6% of syllables in a
   sample of 3,000 dictionary words had no matching CV alias. Phrase-initial `- C` and `C C`
   pieces are not used.
