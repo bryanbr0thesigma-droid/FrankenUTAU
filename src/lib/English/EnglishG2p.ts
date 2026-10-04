@@ -40,6 +40,10 @@ const vccvVowels = new Set("a @ u 9 8 I e 3 A i E O Q 6 o".split(" "));
 const arpaVowels = new Set(
   "aa ae ah ao aw ay eh er ey ih iy ow oy uh uw".split(" ")
 );
+const arpaPhonemes = new Set([
+  ...arpaVowels,
+  ..."b ch d dh f g hh jh k l m n ng p r s sh t th v w y z zh".split(" "),
+]);
 export const isVowel = (s: string, scheme: PhonemeScheme = "vccv"): boolean =>
   (scheme === "arpa" ? arpaVowels : vccvVowels).has(s);
 
@@ -139,12 +143,29 @@ export const wordToSymbols = (
   scheme: PhonemeScheme = "vccv"
 ): string[] | null => {
   const hint = /^\[([a-z ]+)\]$/i.exec(lyric.trim());
+  // `k ae t`のように3音素以上をARPAbetだけで書いた歌詞も、`[k ae t]`と同じ発音指定として扱う
+  const bare = lyric.toLowerCase().trim().split(/\s+/);
+  const bareArpa =
+    bare.length >= 3 && bare.every((p) => arpaPhonemes.has(p)) ? bare : null;
+  // ARPAbet音源では、`ay`や`uw`のように音素1つだけの歌詞を、英単語ではなくその音素として読む
+  const bareVowel =
+    scheme === "arpa" && arpaVowels.has(lyric.toLowerCase().trim())
+      ? [lyric.toLowerCase().trim()]
+      : null;
   let arpa: string[];
-  if (hint) {
-    arpa = hint[1].toLowerCase().split(/\s+/).filter(Boolean);
+  if (hint || bareArpa || bareVowel) {
+    arpa =
+      bareArpa ??
+      bareVowel ??
+      hint![1].toLowerCase().split(/\s+/).filter(Boolean);
   } else {
-    const word = lyric.toLowerCase().replace(/[^a-z']/g, "");
-    if (word === "" || word !== lyric.toLowerCase().trim()) return null;
+    // 語頭語末の句読点(`hello,`など)は無視する。`!`は音源のエイリアスを直接指定する印なので除く
+    const text = lyric
+      .toLowerCase()
+      .trim()
+      .replace(/^[,.;:?"“”()]+|[,.;:?"“”()]+$/g, "");
+    const word = text.replace(/[^a-z']/g, "");
+    if (word === "" || word !== text) return null;
     const entry = dict?.get(word);
     const romaji = romajiSyllable(word);
     // `ba`のようにCMUdictが文字の読み(b iy ey)を持つ短い綴りは、ローマ字読みを優先する

@@ -27,7 +27,8 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
   conventions of OpenUtau's *English VCCV Phonemizer* (`-ba`, `ba`, `a b`, `at-`, `aa`; CZ-SAMPA
   symbols), using CMUdict (`public/dict/cmudict-en.txt`, loaded on first use, then cached offline).
   Type a word on its first note and `+` on the notes for further syllables, e.g. `hello` `+`.
-  Use `[hh ah l ow]` to give ARPAbet pronunciations, and `!alias` to force an exact alias.
+  Use `[hh ah l ow]` (or just `hh ah l ow`, three or more tokens) to give ARPAbet pronunciations, and
+  `!alias` to force an exact alias. Punctuation around a word (`hello,`) is ignored.
   Differences from OpenUtau: one CV plus one trailing VC per note (consonant clusters are
   simplified to the first and last consonant), no ConVel, no YAML dictionary/replacement files,
   and unknown words use a crude spelling-based guess instead of OpenUtau's neural G2P.
