@@ -38,6 +38,9 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
   and pieces the bank has no sound for (consonant clusters, `w`/`y` glide endings) become rests. Timing values
   saved for the other bank are dropped. Tested against Cyn English; symbols follow OpenUtau's VCCV table plus
   `&`=ae, `0`=er, `1`=ih, `x`=ah. Plain English-word USTs are never touched.
+- **Japanese (kana) songs**: on import, OpenUtau's `+` hold is merged into the previous note and kana the voicebank
+  lacks (`を`, `うぃ`, `てぃ`, `ふぁ`...) are swapped for the closest romaji or kana alias it has. `っ` stays a short silence.
+  Only the first track of a multi-track `.ustx` is imported.
 - **Lower High Notes** (Batch Process menu): drops every note above a chosen ceiling (F4 to G5, default D5) by whole
   octaves until it fits. Note names stay the same and per-note pitch curves are untouched; rests are ignored. Undoable.
 - Save as `.ust` or `.ustx` (opens in OpenUtau).

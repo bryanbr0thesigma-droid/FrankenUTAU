@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useMenu } from "../../../hooks/useMenu";
 import { LOG } from "../../../lib/Logging";
 import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
+import { normalizeJapaneseNotes } from "../../../lib/Japanese/normalizeKana";
 import { dumpNotes } from "../../../lib/Note";
 import { EnglishARPAbetPhonemizer } from "../../../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { undoManager } from "../../../lib/UndoManager";
@@ -133,6 +134,31 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
             merged: converted.merged,
             rests: converted.rests,
             approximated: converted.approximated,
+          })
+        );
+        snackBarStore.setOpen(true);
+      }
+      // かなの歌詞のustは、`+`の伸ばしや音源に無い外来音のかなを整える
+      const japanese =
+        converted === null && vb !== null
+          ? normalizeJapaneseNotes(ust.notes, (a) => !!vb.getOtoRecord(a, 60, ""))
+          : null;
+      if (japanese !== null) {
+        ust.notes = japanese.notes;
+        LOG.info(
+          `かなの歌詞を整えた。${JSON.stringify({
+            merged: japanese.merged,
+            remapped: japanese.remapped,
+            rests: japanese.rests,
+          })}`,
+          "FooterProjectMenu"
+        );
+        snackBarStore.setSeverity("info");
+        snackBarStore.setValue(
+          t("editor.footer.ustJapaneseNormalized", {
+            merged: japanese.merged,
+            remapped: japanese.remapped,
+            rests: japanese.rests,
           })
         );
         snackBarStore.setOpen(true);
