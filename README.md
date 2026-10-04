@@ -21,7 +21,9 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
   (`__tests__/fixtures/case-oto.txt`, alias names and timings only): about 1.6% of syllables in a
   sample of 3,000 dictionary words had no matching CV alias. Phrase-initial `- C` and `C C`
   pieces are not used.
-- **English VCCV / VCV voicebanks** (phonemizer "(English) VCCV / VCV"): a port of the alias
+- **English VCCV / VCV voicebanks** (phonemizer "(English) VCCV / VCV", selected automatically when a
+  CZ-SAMPA-style bank with aliases like `@ t`, `I t`, `-ba` is loaded; otherwise pick it in the
+  Phonemizer menu): a port of the alias
   conventions of OpenUtau's *English VCCV Phonemizer* (`-ba`, `ba`, `a b`, `at-`, `aa`; CZ-SAMPA
   symbols), using CMUdict (`public/dict/cmudict-en.txt`, loaded on first use, then cached offline).
   Type a word on its first note and `+` on the notes for further syllables, e.g. `hello` `+`.
