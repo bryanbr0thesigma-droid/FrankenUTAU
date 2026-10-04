@@ -106,3 +106,26 @@ describe("convertVccvNotes", () => {
     expect(r.notes.map((n) => n.lyric)).toEqual(["dh ey", "ey s", "R", "R", "R", "s ey"]);
   });
 });
+
+describe("banks with missing recordings", () => {
+  /** `r aa`と`aa r`と`- aa`が無い音源 */
+  const sparse = (a: string) => bank.has(a) && !["r aa", "aa r", "- aa"].includes(a);
+  const sparseResolve = (a: string) => (sparse(a) ? a : null);
+
+  it("uses the closest available vowel instead of silencing the piece", () => {
+    expect(parseVccvPiece("_ra", sparseResolve)).toEqual({ kind: "cv", alias: "r ao", approx: true });
+    expect(parseVccvPiece("ar", sparseResolve)).toEqual({ kind: "vc", alias: "ao r", approx: true });
+    expect(parseVccvPiece("-a", sparseResolve)).toEqual({ kind: "initV", alias: "- ao", approx: true });
+  });
+
+  it("prefers the exact alias and counts the approximations", () => {
+    expect(parseVccvPiece("sA", sparseResolve)).toEqual({ kind: "cv", alias: "s ey" });
+    const r = convertVccvNotes(makeNotes(["-dhA", "A s", "_ra", "a b", "sA"]), sparse)!;
+    expect(r.notes.map((n) => n.lyric)).toEqual(["dh ey", "ey s", "r ao", "aa b", "s ey"]);
+    expect(r.approximated).toBe(1);
+  });
+
+  it("still silences a piece when no similar vowel exists either", () => {
+    expect(parseVccvPiece("_ra", () => null)).toEqual({ kind: "rest" });
+  });
+});

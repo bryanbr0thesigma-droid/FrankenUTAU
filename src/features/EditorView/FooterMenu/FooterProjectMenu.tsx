@@ -122,6 +122,7 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
             converted: converted.converted,
             merged: converted.merged,
             rests: converted.rests,
+            approximated: converted.approximated,
           })}`,
           "FooterProjectMenu"
         );
@@ -131,6 +132,7 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
             converted: converted.converted,
             merged: converted.merged,
             rests: converted.rests,
+            approximated: converted.approximated,
           })
         );
         snackBarStore.setOpen(true);

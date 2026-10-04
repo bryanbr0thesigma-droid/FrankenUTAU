@@ -348,7 +348,7 @@ export const translationEn = {
       wav: "Save WAV",
       ustLoadError: "Failed to load the UST file. Please check the file.",
       ustVccvConverted:
-        "This UST was written for a VCCV voicebank. Converted {{converted}} lyrics to this voicebank's ARPAbet names, merged {{merged}} held vowels and silenced {{rests}} pieces it has no sound for (consonant clusters, etc.).",
+        "This UST was written for a VCCV voicebank. Converted {{converted}} lyrics to this voicebank's ARPAbet names ({{approximated}} of them use a similar vowel because the voicebank lacks that recording), merged {{merged}} held vowels and silenced {{rests}} pieces it has no sound for (consonant clusters, etc.).",
       verticalZoomIn: "Zoom In (Vertical)",
       verticalZoomOut: "Zoom Out (Vertical)",
       horizontalZoomIn: "Zoom In (Horizontal)",

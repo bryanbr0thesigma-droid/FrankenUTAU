@@ -62,6 +62,27 @@ const consonants: Record<string, string> = {
   z: "z",
 };
 
+/**
+ * 音源にそのエイリアスが無いとき(録音が欠けた音源)に、休符にする代わりに使う近い母音。近い順。
+ */
+const similarVowels: Record<string, string[]> = {
+  aa: ["ao", "ah", "ae"],
+  ae: ["eh", "aa", "ah"],
+  ah: ["aa", "uh", "ae", "eh"],
+  ao: ["aa", "ow", "ah"],
+  aw: ["ow", "aa", "ao"],
+  ay: ["aa", "ey", "iy"],
+  eh: ["ae", "ih", "ey", "ah"],
+  er: ["ah", "uh", "eh"],
+  ey: ["eh", "iy", "ih"],
+  ih: ["iy", "eh", "ey"],
+  iy: ["ih", "ey"],
+  ow: ["ao", "uw", "aw"],
+  oy: ["ow", "ao"],
+  uh: ["uw", "ah", "ow"],
+  uw: ["uh", "ow"],
+};
+
 type Token = { v: string } | { c: string };
 
 /** ピースを音素に分ける。読めない記号があればnull */
@@ -88,7 +109,8 @@ const tokenize = (s: string): Token[] | null => {
 
 export type Piece =
   | { kind: "rest" }
-  | { kind: "cv" | "vc" | "initV"; alias: string }
+  /** approxは、音源に無い母音を近い母音で代用したこと */
+  | { kind: "cv" | "vc" | "initV"; alias: string; approx?: boolean }
   /** 母音の伸ばし。直前のノートに足す */
   | { kind: "hold" };
 
@@ -114,31 +136,42 @@ export const parseVccvPiece = (
     (tok, i) => !(i > 0 && "c" in tok && tok.c === "r" && "v" in tokens[i - 1] && tokens[i - 1]["v"] === "er")
   );
   const rest: Piece = { kind: "rest" };
-  const make = (kind: "cv" | "vc" | "initV", alias: string): Piece => {
-    const found = resolve(alias);
-    return found ? { kind, alias: found } : rest;
+  /** 母音vと、もう片方の音素(子音または`-`)からエイリアスを作る。母音が欠けていれば近い母音を試す */
+  const make = (
+    kind: "cv" | "vc" | "initV",
+    other: string,
+    vowel: string
+  ): Piece => {
+    const name = (v: string) => (kind === "vc" ? `${v} ${other}` : `${other} ${v}`);
+    const exact = resolve(name(vowel));
+    if (exact) return { kind, alias: exact };
+    for (const v of similarVowels[vowel] ?? []) {
+      const near = resolve(name(v));
+      if (near) return { kind, alias: near, approx: true };
+    }
+    return rest;
   };
   if (t.length === 1 && "v" in t[0]) {
-    return initial ? make("initV", `- ${t[0].v}`) : { kind: "hold" };
+    return initial ? make("initV", "-", t[0].v) : { kind: "hold" };
   }
   if (t.length === 2 && "c" in t[0] && "v" in t[1]) {
-    return make("cv", `${t[0].c} ${t[1].v}`);
+    return make("cv", t[0].c, t[1].v);
   }
   if (t.length === 2 && "v" in t[0] && "c" in t[1]) {
-    return make("vc", `${t[0].v} ${t[1].c}`);
+    return make("vc", t[1].c, t[0].v);
   }
   if (t.every((tok) => "v" in tok)) return { kind: "hold" };
   // `h9l`のようにCVCのピースは、音源にあるCV部分だけを使う
   if (t.length === 3 && "c" in t[0] && "v" in t[1] && "c" in t[2]) {
-    return make("cv", `${t[0].c} ${t[1].v}`);
+    return make("cv", t[0].c, t[1].v);
   }
   // `arb`のようにVCCのピースは、音源にあるVC部分だけを使う
   if (t.length === 3 && "v" in t[0] && "c" in t[1] && "c" in t[2]) {
-    return make("vc", `${t[0].v} ${t[1].c}`);
+    return make("vc", t[1].c, t[0].v);
   }
   // `str`のようにCCVのピースは、母音の直前の子音とのCVだけを使う
   if (t.length === 3 && "c" in t[0] && "c" in t[1] && "v" in t[2]) {
-    return make("cv", `${t[1].c} ${t[2].v}`);
+    return make("cv", t[1].c, t[2].v);
   }
   // 子音だけ(`pr`、`st`)や、これ以外のピース
   return rest;
@@ -152,6 +185,8 @@ export type ConvertResult = {
   merged: number;
   /** 休符にした数 */
   rests: number;
+  /** 音源に無い母音を近い母音で代用した数。convertedに含まれる */
+  approximated: number;
 };
 
 /**
@@ -184,6 +219,7 @@ export const convertVccvNotes = (
   let converted = 0;
   let merged = 0;
   let rests = 0;
+  let approximated = 0;
   /** 直前のノートがCVかどうか。伸ばしを足せるのはCVだけ */
   let prevHoldable = false;
   for (const n of notes) {
@@ -209,9 +245,10 @@ export const convertVccvNotes = (
     } else {
       n.lyric = piece.alias;
       converted++;
+      if (piece.approx) approximated++;
       prevHoldable = piece.kind !== "vc";
     }
     out.push(n);
   }
-  return { notes: out, converted, merged, rests };
+  return { notes: out, converted, merged, rests, approximated };
 };
