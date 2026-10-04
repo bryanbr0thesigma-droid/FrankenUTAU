@@ -32,6 +32,12 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
   Differences from OpenUtau: one CV plus one trailing VC per note (consonant clusters are
   simplified to the first and last consonant), no ConVel, no YAML dictionary/replacement files,
   and unknown words use a crude spelling-based guess instead of OpenUtau's neural G2P.
+- **VCCV-style `.ust` on an ARPAbet CVVC bank**: a UST sequenced one piece per note for an English VCCV bank
+  (`-dhA`, `A s`, `sA`, `_ra`, `em-`) is converted when imported while the ARPAbet phonemizer is active:
+  CV/VC pieces become the bank's names (`dh ey`, `ey s`), vowel-only pieces are merged into the previous note,
+  and pieces the bank has no sound for (consonant clusters, `w`/`y` glide endings) become rests. Timing values
+  saved for the other bank are dropped. Tested against Cyn English; symbols follow OpenUtau's VCCV table plus
+  `&`=ae, `0`=er, `1`=ih, `x`=ah. Plain English-word USTs are never touched.
 - Save as `.ust` or `.ustx` (opens in OpenUtau).
 - Not carried over from `.ustx`: OpenUtau expressions, phonemizer overrides, extra tracks, curves.
 

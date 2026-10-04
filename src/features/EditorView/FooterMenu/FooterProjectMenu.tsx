@@ -17,7 +17,9 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useMenu } from "../../../hooks/useMenu";
 import { LOG } from "../../../lib/Logging";
+import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
 import { dumpNotes } from "../../../lib/Note";
+import { EnglishARPAbetPhonemizer } from "../../../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { undoManager } from "../../../lib/UndoManager";
 import { Ust } from "../../../lib/Ust";
 import { dumpUstx } from "../../../lib/Ustx";
@@ -105,6 +107,33 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           `vbがロードされていません。テスト以外では必ず事前にロードされるはずなので何かがおかしい`,
           "FooterProjectMenu"
         );
+      }
+      // VCCV音源向けのustをARPAbetのCVVC音源で歌わせる場合は、歌詞を音源のエイリアスに変換する
+      const converted =
+        vb !== null &&
+        useMusicProjectStore.getState().phonemizer instanceof
+          EnglishARPAbetPhonemizer
+          ? convertVccvNotes(ust.notes, (a) => !!vb.getOtoRecord(a, 60, ""))
+          : null;
+      if (converted !== null) {
+        ust.notes = converted.notes;
+        LOG.info(
+          `VCCVのustをARPAbetの音源向けに変換。${JSON.stringify({
+            converted: converted.converted,
+            merged: converted.merged,
+            rests: converted.rests,
+          })}`,
+          "FooterProjectMenu"
+        );
+        snackBarStore.setSeverity("info");
+        snackBarStore.setValue(
+          t("editor.footer.ustVccvConverted", {
+            converted: converted.converted,
+            merged: converted.merged,
+            rests: converted.rests,
+          })
+        );
+        snackBarStore.setOpen(true);
       }
       setNotes(ust.notes);
       setUstLoadProgress(false);
