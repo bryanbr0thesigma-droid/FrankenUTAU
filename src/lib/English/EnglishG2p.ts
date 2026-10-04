@@ -40,7 +40,7 @@ const vccvVowels = new Set("a @ u 9 8 I e 3 A i E O Q 6 o".split(" "));
 const arpaVowels = new Set(
   "aa ae ah ao aw ay eh er ey ih iy ow oy uh uw".split(" ")
 );
-const arpaPhonemes = new Set([
+export const arpaPhonemes = new Set([
   ...arpaVowels,
   ..."b ch d dh f g hh jh k l m n ng p r s sh t th v w y z zh".split(" "),
 ]);

@@ -129,3 +129,25 @@ describe("banks with missing recordings", () => {
     expect(parseVccvPiece("_ra", () => null)).toEqual({ kind: "rest" });
   });
 });
+
+describe("banks that also carry Japanese romaji aliases (e.g. VLGR)", () => {
+  /** `to`、`i`、`u`、`ka`のようなローマ字のエイリアスも持つ音源 */
+  const romaji = ["to", "i", "u", "o", "ka", "ta", "ra", "ba", "ge", "te"];
+  const both = (a: string) => bank.has(a) || romaji.includes(a);
+
+  it("reads Sonata pieces that share a spelling with a romaji alias as VCCV pieces", () => {
+    const r = convertVccvNotes(makeNotes(["-dhA", "A s", "to", "tA", "u", "ra", "A m"]), both)!;
+    // `to`はVCCVでは t+uw、`u`は伸ばし。ローマ字の`to`や`u`としては鳴らさない
+    expect(r.notes.map((n) => n.lyric)).toEqual(["dh ey", "ey s", "t uw", "t ey", "r aa", "ey m"]);
+    expect(r.notes[3].length).toBe(240);
+    expect(r.merged).toBe(1);
+  });
+
+  it("still counts an ARPAbet alias the bank has as native", () => {
+    expect(convertVccvNotes(makeNotes(["dh ey", "ey s", "s ey"]), both)).toBeNull();
+  });
+
+  it("does not touch a Japanese romaji song", () => {
+    expect(convertVccvNotes(makeNotes(["ka", "ta", "ra", "ba", "ge", "te"]), both)).toBeNull();
+  });
+});

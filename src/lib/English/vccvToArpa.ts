@@ -10,6 +10,7 @@
  * - 子音だけのピース(`pr`、`-tr`、`st`)や、音源にない組は休符にする
  */
 import type { Note } from "../Note";
+import { arpaPhonemes } from "./EnglishG2p";
 
 /** VCCVの母音記号→ARPAbet */
 const vowels: Record<string, string> = {
@@ -195,6 +196,16 @@ export type ConvertResult = {
  * そうでなければnullを返し、ノートには触れない。
  * @param has 音源にそのエイリアスがあるか
  */
+/** `k ae`や`- ah`のように、ARPAbetの音素2つ(または`-`と音素)でできたエイリアスか */
+const isArpaAlias = (alias: string): boolean => {
+  const t = alias.split(" ");
+  return (
+    t.length === 2 &&
+    (t[0] === "-" || arpaPhonemes.has(t[0])) &&
+    arpaPhonemes.has(t[1])
+  );
+};
+
 export const convertVccvNotes = (
   notes: Note[],
   has: (alias: string) => boolean
@@ -210,7 +221,10 @@ export const convertVccvNotes = (
   // 十分にある場合だけ対象にする。(`-`や`_`の付いたピース、大文字の母音、数字、`&`、`@`)
   const marked = sung.filter((n) => /[-_AEIOQ&@0-9]/.test(n.lyric));
   if (marked.length < sung.length * 0.3) return null;
-  const missing = sung.filter((n) => !has(n.lyric));
+  // 音源にあるエイリアスでも、`to`や`i`のように日本語のローマ字と同じ綴りのものは、
+  // この音源の音ではなくVCCVのピースとして読む。音源に最初からある形はARPAbetのエイリアスだけ
+  const native = (lyric: string) => has(lyric) && isArpaAlias(lyric);
+  const missing = sung.filter((n) => !native(n.lyric));
   const readable = missing.filter((n) => parseVccvPiece(n.lyric, resolve) !== null);
   if (missing.length < sung.length * 0.7 || readable.length < missing.length * 0.7) {
     return null;
@@ -224,7 +238,7 @@ export const convertVccvNotes = (
   let prevHoldable = false;
   for (const n of notes) {
     const piece =
-      n.lyric === "R" || has(n.lyric) ? null : parseVccvPiece(n.lyric, resolve);
+      n.lyric === "R" || native(n.lyric) ? null : parseVccvPiece(n.lyric, resolve);
     if (piece === null) {
       // 休符や、音源にそのままあるエイリアスは触らない
       out.push(n);
