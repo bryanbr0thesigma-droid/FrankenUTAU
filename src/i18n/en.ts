@@ -442,6 +442,11 @@ export const translationEn = {
     octaveDown: "Lower by 1 Octave",
     envelopeNormalize: "Envelope Normalization",
     pitchSnapBatchProcess: "Snap Pitch to Scale",
+    limitHighNotesBatchProcess: {
+      title: "Lower High Notes",
+      ceiling: "Highest note (higher notes drop by octaves until they fit)",
+      ceilingOptions: ["F4", "G4", "A4", "B4", "C5", "D5", "E5", "G5"],
+    },
     applyOtoBatchProcess: {
       title: "Apply Oto Settings",
     },
