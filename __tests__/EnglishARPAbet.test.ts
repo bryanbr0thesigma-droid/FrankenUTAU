@@ -200,3 +200,12 @@ describe("joins after a consonant ending and missing consonants (CASE has no zh)
     expect(out[0][1]).toBe("ay p");
   });
 });
+
+describe("diphthong stand-ins start like the diphthong", () => {
+  it("sour: when s aw is missing, uses s aa (aw starts like aa), not s ow", () => {
+    const out = sing(["sour", "+", "R"]);
+    expect(out[0][0]).toBe("s aa");
+    // 続く`aw er`の繋ぎは、元の`aw`から始まるので、`aa`の後なら自然に繋がる
+    expect(out[1][0]).toBe("aw er");
+  });
+});

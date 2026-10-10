@@ -6,7 +6,8 @@ export const similarVowels: Record<string, string[]> = {
   ae: ["eh", "aa", "ah"],
   ah: ["aa", "uh", "ae", "eh"],
   ao: ["aa", "ow", "ah"],
-  aw: ["ow", "aa", "ao"],
+  // 二重母音は、始まりの母音に近いものを先にする(`aw`は`aa`で始まる。`ow`で代用すると、続く`aw er`と繋がらず`so-awer`になる)
+  aw: ["aa", "ao", "ow"],
   ay: ["aa", "ey", "iy"],
   eh: ["ae", "ih", "ey", "ah"],
   er: ["ah", "uh", "eh"],
