@@ -254,6 +254,16 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       // 無声閉鎖音の後に`s`が続くとき(`that's`の`t s`)は、聞こえる`s`のほうを鳴らす
       if (coda.length >= 2 && voicelessStops.has(coda[0]) && coda[1] === "s") {
         consonant = coda[1];
+      } else if (
+        knob("chT") &&
+        coda.length === 1 &&
+        (coda[0] === "ch" || coda[0] === "jh") &&
+        nextIsSyllable &&
+        (this.syllableOf(next)?.syl.onset.length ?? 1) === 0
+      ) {
+        // 実験用: 音源に`ae ch`が無く`ae sh`(hash)になる。次が母音で始まるなら、閉鎖の`ae t`で終えて、
+        // 次のノートの`ch ih`(hatch it)に破擦音を任せる
+        consonant = coda[0] === "ch" ? "t" : "d";
       } else if (coda.length === 1 && stops.has(coda[0]) && nextIsSyllable) {
         // 次が`s`+子音で始まるとき(`bit slow`)は、聞こえない語尾の閉鎖音を省いて、語頭の`s`へ繋ぐ
         const lead = this.info.get(next)?.lead;
