@@ -13,7 +13,6 @@ import {
 } from "../English/EnglishPhonemizerBase";
 import type { PhonemeScheme } from "../English/EnglishG2p";
 import { similarConsonants, similarVowels } from "../English/similarVowels";
-import { knob } from "./JPAutoPhonemizer";
 
 export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
   name = "phonemizer.EnglishARPAbetPhonemizer";
@@ -85,16 +84,8 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
     if (c === VOWEL_END) {
       return [prev, ...(similarVowels[prev] ?? [])].map((x) => `${x} -`);
     }
-    // 実験用: gDは`g`が無いとき`d`を先に、noSubは近い子音で代用せず末尾VCを付けない
-    const table = knob("gD")
-      ? { ...similarConsonants, g: ["d", "k"] }
-      : similarConsonants;
-    if (knob("noSub"))
-      return this.pairs(
-        [c],
-        [prev, ...(similarVowels[prev] ?? [])],
-        (cc, x) => `${x} ${cc}`,
-      );
+    // `g`の録音が無いとき(`uh g`)は、`k`より有声の`d`を先に代用する(sugarが「sharp cutoff」になるのを避ける)
+    const table = { ...similarConsonants, g: ["d", "k"] };
     return this.pairs(
       this.near([c], table),
       [prev, ...(similarVowels[prev] ?? [])],

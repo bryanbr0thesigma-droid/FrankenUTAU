@@ -10,7 +10,11 @@
  */
 import type OtoRecord from "utauoto/dist/OtoRecord";
 import type { ConsonantParam, ExtraTail } from "../Phonemizer/JPAutoPhonemizer";
-import { JPAutoPhonemizer, fixedPartMs, knob } from "../Phonemizer/JPAutoPhonemizer";
+import {
+  JPAutoPhonemizer,
+  fixedPartMs,
+  knob,
+} from "../Phonemizer/JPAutoPhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
 import {
@@ -259,6 +263,16 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
         // 音源に`ae ch`が無く`ae sh`(hash)になる。次が母音で始まるなら、閉鎖の`ae t`で終えて、
         // 次のノートの`ch ih`(hatch it)に破擦音を任せる
         consonant = coda[0] === "ch" ? "t" : "d";
+      } else if (
+        knob("nSkip") &&
+        coda.length === 1 &&
+        coda[0] === "n" &&
+        nextIsSyllable &&
+        (this.syllableOf(next)?.syl.onset.length ?? 0) >= 2 &&
+        ["t", "d"].includes(this.info.get(next)?.lead ?? "")
+      ) {
+        // 実験用: `in`+`trest`は、`n`を省いて`t`へ繋ぐ(鼻音と`t`は同じ位置で作る音)
+        consonant = this.info.get(next)!.lead;
       } else if (coda.length === 1 && stops.has(coda[0]) && nextIsSyllable) {
         // 次が`s`+子音で始まるとき(`bit slow`)は、聞こえない語尾の閉鎖音を省いて、語頭の`s`へ繋ぐ
         const lead = this.info.get(next)?.lead;
@@ -272,9 +286,9 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       }
     } else if (nextIsSyllable) {
       consonant = this.info.get(next)?.lead ?? null;
-      // 実験用: 次が`s`+子音(skull)のとき、`ay s`ではなく子音連続`s k`のピースで繋ぐ
+      // 次が`s`+子音(skull)のとき、短い`ay s`では`s`が聞こえず`kull`になるので、子音連続`s k`のピースで繋ぐ
       const nsyl = this.syllableOf(next)?.syl;
-      if (knob("sCC") && consonant === "s" && nsyl && nsyl.onset.length >= 2) {
+      if (consonant === "s" && nsyl && nsyl.onset.length >= 2) {
         consonant = `s ${nsyl.onset[1]}`;
       }
     } else if (this.closesVowels && cur.atWordEnd && next.lyric === "R") {
@@ -351,23 +365,6 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       const record = find(`${coda[0]} -`);
       return record ? { record, kind: "release" } : null;
     }
-    // 実験用: 語尾の子音(鼻音など)の後に子音連続で始まる語(`in`+`trest`)が続くとき、語頭の子音(`t`)が
-    // 落ちて`ngrest`と聞こえる。語尾の子音からその子音への繋ぎ(`n t`)を足す
-    if (
-      knob("leadCC") &&
-      coda.length === 1 &&
-      !stops.has(coda[0]) &&
-      !ending &&
-      tailed &&
-      note.next
-    ) {
-      const next = this.syllableOf(note.next);
-      const lead = this.info.get(note.next)?.lead;
-      if (next && next.syl.onset.length >= 2 && lead) {
-        const record = find(`${coda[0]} ${lead}`);
-        return record ? { record, kind: "lead" } : null;
-      }
-    }
     return null;
   }
 
@@ -393,19 +390,6 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       fitted,
       Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION),
     );
-    // 実験用: 語尾の子音と次の語頭が同じ(glass sir)ときは、次のノートの子音と重なって`ssss`と長くなる
-    if (knob("geminate") && note.next) {
-      const cur = this.syllableOf(note);
-      const nsyl = this.syllableOf(note.next)?.syl;
-      if (
-        cur?.hasCoda &&
-        nsyl &&
-        cur.syl.coda[cur.syl.coda.length - 1] === nsyl.onset[0] &&
-        consonantParam.consonant === cur.syl.coda[0]
-      ) {
-        return Math.min(capped, 55);
-      }
-    }
     return capped;
   }
 }

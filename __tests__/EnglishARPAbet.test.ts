@@ -465,3 +465,33 @@ describe("stops and affricates before another word", () => {
     expect(pieces(["hatch", "R"], [240, 480])[0][1]).toBe("ae sh");
   });
 });
+
+describe("s + consonant onsets and missing g", () => {
+  const run = (lyrics: string[], lens: number[]) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = lyrics.map((l, i) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = lens[i]; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    return notes.map((n) =>
+      p.getRequestParam(vb, n, "", {
+        velocity: 100, intensity: 100, modulation: 0,
+        envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+      }).map((q, i) => (i === 0 ? n.atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs)))
+    );
+  };
+  it("my skull joins the s to the k with the s k piece, not a short ay s", () => {
+    const out = run(["my", "skull", "R"], [240, 480, 480]);
+    expect(out[0]).toEqual(["m ay", "s k"]);
+    expect(out[1][0]).toBe("k ah");
+  });
+  it("sugar: with no uh g, the stand-in is the voiced d, not k", () => {
+    const out = run(["sugar", "+", "R"], [240, 240, 480]);
+    expect(records.has("uh g")).toBe(false);
+    expect(out[0][1]).toBe("uh d");
+  });
+});
