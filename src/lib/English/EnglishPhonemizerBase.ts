@@ -39,6 +39,9 @@ const stops = new Set(["b", "d", "g", "k", "p", "t", "dd", "dx", "q", "ch", "j",
 const isPlus = (n: Note | undefined) =>
   n !== undefined && n.lyric !== undefined && n.lyric.startsWith("+");
 
+/** 短いノートで末尾VCを縮めるときの下限(ms)。これより短いと子音が聞き取れないので省く */
+export const MIN_TAIL_MS = 30;
+
 /** 母音で終わる語尾を表す、末尾VCの擬似子音 */
 export const VOWEL_END = "-";
 
@@ -227,12 +230,19 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     return null;
   }
 
+  /**
+   * 末尾VCの長さ。短いノートでは、VCが収まらないとVCごと省かれて語尾の子音が鳴らなくなるので、
+   * CVの固定部分を除いて残る長さまで縮めて、子音を残す。残りが短すぎる(MIN_TAIL_MS未満)ときは省く。
+   */
   getVCTargetLength(
     note: Note,
     vcOtoRecord: OtoRecord,
     consonantParam: ConsonantParam
   ): number {
-    if (!note.next?.oto) return consonantParam.lengthValue;
-    return super.getVCTargetLength(note, vcOtoRecord, consonantParam);
+    const full = note.next?.oto
+      ? super.getVCTargetLength(note, vcOtoRecord, consonantParam)
+      : consonantParam.lengthValue;
+    const available = note.targetLength - (note.oto?.velocity ?? 0);
+    return full > available && available >= MIN_TAIL_MS ? available : full;
   }
 }

@@ -133,3 +133,35 @@ describe("sparse diphone banks: nearest vowel instead of silence", () => {
     expect(alias(["I", "sour"])[1]).toMatch(/^s (ow|aa|ao)$/);
   });
 });
+
+describe("short notes keep their tail consonant", () => {
+  /** テンポとtick長を指定して`cat`を1ノートだけ歌わせ、CV+VCの何個のparamsになるかを返す */
+  const paramCount = (tempo: number, length: number) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const mk = (lyric: string) => {
+      const n = new Note();
+      n.lyric = lyric; n.tempo = tempo; n.notenum = 60; n.length = length; n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk("cat"), mk("R")];
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    const params = p.getRequestParam(vb, notes[0], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    return params.length;
+  };
+
+  it("plays CV + tail on a comfortable note", () => {
+    expect(paramCount(120, 480)).toBe(2);
+  });
+  it("still plays the tail on a short, fast note by shortening it", () => {
+    // 150bpmの16分音符(約100ms)
+    expect(paramCount(150, 120)).toBe(2);
+  });
+  it("drops the tail only when there is essentially no room for it", () => {
+    expect(paramCount(150, 10)).toBe(1);
+  });
+});
