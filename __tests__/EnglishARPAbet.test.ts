@@ -392,3 +392,18 @@ describe("tail consonants that the recordings cannot play", () => {
     expect(sing(["you", "R"])[0][0]).toBe("y uw3");
   });
 });
+
+describe("the last note of a song", () => {
+  it("still plays its ending consonant when no rest follows", () => {
+    const p = new EnglishARPAbetPhonemizer();
+    const n = new Note();
+    n.lyric = "more"; n.tempo = 150; n.notenum = 60; n.length = 960; n.phonemizer = p;
+    n.applyOto(vb);
+    const params = p.getRequestParam(vb, n, "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    expect(params.length).toBe(2);
+    expect(aliasOf(params[1].resamp!.inputWav, params[1].resamp!.offsetMs)).toBe("ao r");
+  });
+});

@@ -31,6 +31,12 @@ export type ExtraTail = {
 export const knob = (name: string): boolean =>
   !!(globalThis as { __FRANKEN?: Record<string, boolean> }).__FRANKEN?.[name];
 
+/** 実験用の数値の切替。無ければundefined */
+export const knobNum = (name: string): number | undefined => {
+  const v = (globalThis as { __FRANKEN?: Record<string, unknown> }).__FRANKEN?.[name];
+  return typeof v === "number" ? v : undefined;
+};
+
 /** CVの固定部分の長さ(ms)。実験用に、子音速度で縮む分を反映する */
 export const fixedPartMs = (note: Note): number =>
   (note.oto?.velocity ?? 0) * (knob("fixed") ? note.velocityRate : 1);
@@ -490,6 +496,20 @@ export class JPAutoPhonemizer extends BasePhonemizer {
    * @param note 対象のノート
    * @returns
    */
+  /**
+   * noteの後ろに置く末尾VCが担当する子音。ノートの次が無い(曲の最後のノート)ときは、
+   * 休符が続くものとして扱う。次が無いと、語尾の子音が鳴らず`galore`が`galo`になる
+   */
+  protected getNextConsonantOf(note: Note): ConsonantParam | null {
+    if (note.next !== undefined) return this.getNextConsonant(note.next);
+    return this.getFinalConsonant(note);
+  }
+
+  /** 曲の最後のノートの後ろに置く末尾VCの子音。基本は無し */
+  protected getFinalConsonant(note: Note): ConsonantParam | null {
+    return null;
+  }
+
   getNextConsonant(note: Note): ConsonantParam | null {
     if (!note) return null;
     /** 入力値がVCVの場合はnullを返す */
@@ -518,7 +538,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
      * 非nullが返ってきた場合、[lastPhoneme nextConsonant]がotoに存在するかチェックし、存在すればparamsを2つに分割する。
      * otoが存在しなければparamsは1つ。
      */
-    const nextConsonant = this.getNextConsonant(note.next);
+    const nextConsonant = this.getNextConsonantOf(note);
     const vcOtoRecord = this.getOtoRecord(
       vb,
       this.getLastPhoneme(note, vb),
@@ -557,7 +577,13 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     nextConsonant: ConsonantParam | null,
     target: number,
     availableMs: number,
-  ): { record: OtoRecord; t1: number; t2: number; target: number } | null {
+  ): {
+    record: OtoRecord;
+    t1: number;
+    t2: number;
+    target: number;
+    kind: ExtraTail["kind"];
+  } | null {
     if (target > availableMs) return null;
     const extra = this.getExtraTail(vb, note, nextConsonant);
     if (extra === null) return null;
@@ -586,7 +612,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     return t1 >=
       (isRelease ? 0 : kind === "lead" ? LEAD_VC_MS : MIN_EXTRA_TAIL_MS) &&
       t2 >= MIN_EXTRA_TAIL_MS
-      ? { record, t1, t2, target: total }
+      ? { record, t1, t2, target: total, kind }
       : null;
   }
 
@@ -606,7 +632,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
      * 非nullが返ってきた場合、[lastPhoneme nextConsonant]がotoに存在するかチェックし、存在すればparamsを2つに分割する。
      * otoが存在しなければparamsは1つ。
      */
-    const nextConsonant = this.getNextConsonant(note.next);
+    const nextConsonant = this.getNextConsonantOf(note);
     const vcOtoRecord = this.getOtoRecord(
       vb,
       this.getLastPhoneme(note, vb),
@@ -740,7 +766,9 @@ export class JPAutoPhonemizer extends BasePhonemizer {
               targetMs: Math.ceil((ccT2 + ccRecord.pre) / 50) * 50,
               fixedMs: ccRecord.velocity,
               cutoffMs: ccRecord.blank,
-              intensity: params[1]["resamp"].intensity,
+              intensity:
+                params[1]["resamp"].intensity *
+                (cc.kind === "release" ? (knobNum("releaseVol") ?? 100) / 100 : 1),
               modulation: params[1]["resamp"].modulation,
               tempo: `!${note.tempo.toFixed(2)}`,
               pitches: encodePitch(

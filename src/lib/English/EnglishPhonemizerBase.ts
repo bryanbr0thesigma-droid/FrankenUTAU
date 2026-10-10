@@ -221,6 +221,14 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
    * 語尾のcodaは`-`付き(例: `t-`)で返す。語尾の母音はVOWEL_ENDで返す(closesVowelsの音源のみ)。
    * @param next VCを置くノートの次のノート
    */
+  /** 曲の最後のノートは、休符が続くものとして語尾の子音を鳴らす */
+  protected getFinalConsonant(note: Note): ConsonantParam | null {
+    const rest = new Note();
+    rest.lyric = "R";
+    rest.prev = note;
+    return this.getNextConsonant(rest);
+  }
+
   getNextConsonant(next: Note): ConsonantParam | null {
     const owner = next?.prev;
     const cur = this.syllableOf(owner);
@@ -336,9 +344,17 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     vcOtoRecord: OtoRecord,
     consonantParam: ConsonantParam,
   ): number {
-    const full = note.next?.oto
+    let full = note.next?.oto
       ? super.getVCTargetLength(note, vcOtoRecord, consonantParam)
       : consonantParam.lengthValue;
+    // 実験用: 次の語頭の`s`(skull、slow)へ繋ぐ末尾VCは、短いと`s`が聞こえず`kull`になるので長めにする
+    const cur = this.syllableOf(note);
+    const sLead =
+      knob("longLead") &&
+      consonantParam.consonant === "s" &&
+      !!cur &&
+      !(cur.hasCoda && cur.syl.coda.length > 0);
+    if (sLead) full = Math.max(full, 90);
     const available = note.targetLength - fixedPartMs(note);
     const fitted =
       full > available && available >= MIN_TAIL_MS ? available : full;
@@ -346,7 +362,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     // ノート長のTAIL_FRACTION(35%)を上限にする(聞き比べで、無制限・50%より明瞭だった)
     const capped = Math.min(
       fitted,
-      Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION),
+      Math.max(MIN_TAIL_MS, note.msLength * (sLead ? 0.5 : TAIL_FRACTION)),
     );
     return capped;
   }
