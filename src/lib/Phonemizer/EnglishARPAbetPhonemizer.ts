@@ -44,7 +44,9 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
     if (onset.length === 0) {
       // 直前が子音で終わっていたら、その子音から母音へ。母音から母音への繋ぎ(`ay ih`)では、
       // 語尾の子音の後で母音がもう一度鳴ってしまう
-      const cs = prevCoda !== null ? this.near([prevCoda], similarConsonants) : [];
+      // 語尾の子音からの繋ぎでは、近い子音で代用しない(`ng ay`が無いからと`n ay`にすると、語にない子音が増える)。
+      // 無ければ、母音だけで始める
+      const cs = prevCoda !== null ? [prevCoda] : [];
       const heads =
         prevCoda !== null
           ? this.pairs(cs, vowels, (c, x) => `${c} ${x}`)

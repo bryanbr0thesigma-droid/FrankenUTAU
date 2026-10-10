@@ -299,3 +299,14 @@ describe("missing consonants: keep the vowel, use a voiced neighbour, and lead i
     expect(out[1][0]).toBe("b ih");
   });
 });
+
+describe("joining from the previous word's last consonant", () => {
+  it("never invents a different consonant: wrong I'd has no ng ay, so it starts on the plain vowel, not n ay", () => {
+    const out = sing(["wrong", "I'd", "R"]);
+    expect(out[1][0]).not.toBe("n ay");
+    expect(out[1][0]).toBe("ay");
+  });
+  it("still uses the exact consonant when the piece exists", () => {
+    expect(sing(["slice", "it", "R"])[1][0]).toBe("s ih");
+  });
+});
