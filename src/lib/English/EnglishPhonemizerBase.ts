@@ -39,6 +39,7 @@ export type CvContext = {
 
 type NoteInfo = { lead: string | null };
 
+const fricatives = new Set(["s", "z", "sh", "zh"]);
 const stops = new Set([
   "b",
   "d",
@@ -227,8 +228,19 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     let consonant: string | null = null;
     let ending = false;
     if (cur.hasCoda && cur.syl.coda.length > 0) {
-      consonant = cur.syl.coda[0];
+      const coda = cur.syl.coda;
+      consonant = coda[0];
       ending = !nextIsSyllable;
+      // 実験用: 閉鎖音(録音では閉鎖の無音で終わる)の後に摩擦音が続くときは、摩擦音のほうを鳴らす
+      if (knob("skipStop") && coda.length >= 2 && stops.has(coda[0]) && fricatives.has(coda[1])) {
+        consonant = coda[1];
+      } else if (knob("leadOverStop") && coda.length === 1 && stops.has(coda[0]) && nextIsSyllable) {
+        // 実験用: 次が`s`+子音で始まるときは、語尾の閉鎖音を省いて`s`へ繋ぐ
+        const lead = this.info.get(next)?.lead;
+        if (lead && fricatives.has(lead) && (this.syllableOf(next)?.syl.onset.length ?? 0) >= 2) {
+          consonant = lead;
+        }
+      }
     } else if (nextIsSyllable) {
       consonant = this.info.get(next)?.lead ?? null;
     } else if (this.closesVowels && cur.atWordEnd && next.lyric === "R") {
