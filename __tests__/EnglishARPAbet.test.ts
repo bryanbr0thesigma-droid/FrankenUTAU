@@ -269,7 +269,16 @@ describe("the tail piece gets the pitch of its own time span, not the end of the
     const vc = decodePitch(params[1].resamp!.pitches as string);
     // 前のノートより低い音への移り変わりがあるので、先頭はノート本来の音高から離れている
     expect(Math.abs(cv[0])).toBeGreaterThan(Math.abs(cv[cv.length - 1]));
-    // VCの先頭は、ノート終わりの音高ではなく、ピッチ列の先頭の値から始まる
-    expect(vc[0]).toBe(cv[0]);
+    // VCの先頭のピッチは、VCが実際に始まる時刻のピッチ(ピッチ列の先頭は-(preutter+stp)msの位置)
+    const note = notes[1];
+    const nc = (p as any).getNextConsonant(notes[2]);
+    const vcRec = (p as any).getOtoRecord(vb, (p as any).getLastPhoneme(note, vb), nc.consonant, 60, "", true);
+    const tail = p.getVCTargetLength(note, vcRec, nc);
+    const vp = (p as any).vcAutoFitParam(note, vcRec, tail);
+    const base = (note.atPreutter ?? 0) + (note.atStp ?? 0);
+    const startMs = note.msLength - tail - (vp.preutter + vp.stp); // ノート開始から見たVCの開始時刻
+    const idx = Math.floor((startMs + base) / 1000 / note.pitchSpan);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(vc[0]).toBe(cv[idx]);
   });
 });
