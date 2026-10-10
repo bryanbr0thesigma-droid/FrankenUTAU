@@ -3,16 +3,29 @@ import { readFileSync } from "node:fs";
 import { setEnglishDict } from "../src/lib/English/EnglishG2p";
 import { Note } from "../src/lib/Note";
 import { EnglishARPAbetPhonemizer } from "../src/lib/Phonemizer/EnglishARPAbetPhonemizer";
+import { fixedMs } from "../src/lib/English/EnglishPhonemizerBase";
 
 /** CASE音源のoto.iniから作った、エイリアスだけを持つ疑似音源 */
 const records = new Map<string, any>();
-for (const line of readFileSync("__tests__/fixtures/case-oto.txt", "utf8").split("\n")) {
+for (const line of readFileSync(
+  "__tests__/fixtures/case-oto.txt",
+  "utf8",
+).split("\n")) {
   if (!line.includes("=")) continue;
-  const [filename, rest] = [line.split("=")[0], line.split("=").slice(1).join("=")];
+  const [filename, rest] = [
+    line.split("=")[0],
+    line.split("=").slice(1).join("="),
+  ];
   const [alias, offset, velocity, blank, pre, overlap] = rest.split(",");
   records.set(alias, {
-    alias, filename, dirpath: "", offset: +offset, velocity: +velocity,
-    blank: +blank, pre: +pre, overlap: +overlap,
+    alias,
+    filename,
+    dirpath: "",
+    offset: +offset,
+    velocity: +velocity,
+    blank: +blank,
+    pre: +pre,
+    overlap: +overlap,
   });
 }
 const vb = { getOtoRecord: (a: string) => records.get(a) ?? null } as any;
@@ -24,7 +37,7 @@ beforeAll(() => {
 /** wavは複数のエイリアスを含むので、ファイル名と開始位置でエイリアスを特定する */
 const aliasOf = (file: string, offset: number) =>
   [...records.values()].find(
-    (r) => r.filename === file && Math.max(0, r.offset) === offset
+    (r) => r.filename === file && Math.max(0, r.offset) === offset,
   )?.alias;
 
 const sing = (lyrics: string[]) => {
@@ -47,12 +60,14 @@ const sing = (lyrics: string[]) => {
   notes.forEach((n) => n.applyOto(vb));
   return notes.map((n) => {
     const params = n.phonemizer.getRequestParam(vb, n, "", {
-      velocity: 100, intensity: 100, modulation: 0,
+      velocity: 100,
+      intensity: 100,
+      modulation: 0,
       envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
     });
     // [CV, 末尾VC]の順にエイリアス(ファイル名ではなく原音設定名)を並べる
     return params.map((q, i) =>
-      i === 0 ? n.atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs)
+      i === 0 ? n.atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs),
     );
   });
 };
@@ -80,7 +95,18 @@ describe("EnglishARPAbetPhonemizer with CASE aliases", () => {
     expect(out[2][0].replace(/\d+$/, "")).toBe("ow");
   });
   it("never leaves a plain English word without an alias", () => {
-    const words = ["hello", "world", "sing", "love", "dream", "beautiful", "night", "fire", "stars", "through"];
+    const words = [
+      "hello",
+      "world",
+      "sing",
+      "love",
+      "dream",
+      "beautiful",
+      "night",
+      "fire",
+      "stars",
+      "through",
+    ];
     for (const w of words) {
       const notes = sing([w, "+", "+", "+", "R"]);
       expect(notes.length).toBe(5);
@@ -96,9 +122,14 @@ describe("romaji-style syllables and voicebank detection", () => {
     expect(out[2][0]).toMatch(/^sh iy\d*$/);
   });
   it("detects an ARPAbet diphone bank, but not a Japanese one", async () => {
-    const { isArpabetDiphoneBank } = await import("../src/lib/English/detectScheme");
+    const { isArpabetDiphoneBank } =
+      await import("../src/lib/English/detectScheme");
     expect(isArpabetDiphoneBank(vb)).toBe(true);
-    expect(isArpabetDiphoneBank({ getOtoRecord: (a: string) => (["あ", "ka"].includes(a) ? {} : null) } as any)).toBe(false);
+    expect(
+      isArpabetDiphoneBank({
+        getOtoRecord: (a: string) => (["あ", "ka"].includes(a) ? {} : null),
+      } as any),
+    ).toBe(false);
   });
   it("accepts exact aliases typed with a space", () => {
     const out = sing(["k ae", "ae t", "R"]);
@@ -110,17 +141,25 @@ describe("romaji-style syllables and voicebank detection", () => {
 describe("sparse diphone banks: nearest vowel instead of silence", () => {
   const missing = ["s aw", "f uh", "v aa"];
   const sparseVb = {
-    getOtoRecord: (a: string) => (missing.includes(a) ? null : records.get(a) ?? null),
+    getOtoRecord: (a: string) =>
+      missing.includes(a) ? null : (records.get(a) ?? null),
   } as any;
   const alias = (lyrics: string[]) => {
     const p = new EnglishARPAbetPhonemizer();
     const notes = lyrics.map((lyric) => {
       const n = new Note();
-      n.lyric = lyric; n.tempo = 120; n.notenum = 60; n.length = 480; n.phonemizer = p;
+      n.lyric = lyric;
+      n.tempo = 120;
+      n.notenum = 60;
+      n.length = 480;
+      n.phonemizer = p;
       return n;
     });
     // @ts-ignore
-    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
     notes.forEach((n) => n.applyOto(sparseVb));
     return notes.map((n) => n.atAlias);
   };
@@ -135,20 +174,29 @@ describe("sparse diphone banks: nearest vowel instead of silence", () => {
 });
 
 describe("short notes keep their tail consonant", () => {
-  /** テンポとtick長を指定して`cat`を1ノートだけ歌わせ、CV+VCの何個のparamsになるかを返す */
+  /** テンポとtick長を指定して`man`を1ノートだけ歌わせ、CV+VCの何個のparamsになるかを返す */
   const paramCount = (tempo: number, length: number) => {
     const p = new EnglishARPAbetPhonemizer();
     const mk = (lyric: string) => {
       const n = new Note();
-      n.lyric = lyric; n.tempo = tempo; n.notenum = 60; n.length = length; n.phonemizer = p;
+      n.lyric = lyric;
+      n.tempo = tempo;
+      n.notenum = 60;
+      n.length = length;
+      n.phonemizer = p;
       return n;
     };
-    const notes = [mk("cat"), mk("R")];
+    const notes = [mk("man"), mk("R")];
     // @ts-ignore
-    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
     notes.forEach((n) => n.applyOto(vb));
     const params = p.getRequestParam(vb, notes[0], "", {
-      velocity: 100, intensity: 100, modulation: 0,
+      velocity: 100,
+      intensity: 100,
+      modulation: 0,
       envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
     });
     return params.length;
@@ -215,17 +263,34 @@ describe("tail length cap (35% of the note)", () => {
     const p: any = new EnglishARPAbetPhonemizer();
     const mk = (lyric: string) => {
       const n = new Note();
-      n.lyric = lyric; n.tempo = tempo; n.notenum = 60; n.length = length; n.phonemizer = p;
+      n.lyric = lyric;
+      n.tempo = tempo;
+      n.notenum = 60;
+      n.length = length;
+      n.phonemizer = p;
       return n;
     };
     const notes = [mk("cat"), mk("R")];
     // @ts-ignore
-    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
     notes.forEach((n) => n.applyOto(vb));
     notes.forEach((n) => n.autoFitParam());
     const nc = p.getNextConsonant(notes[1]);
-    const vc = p.getOtoRecord(vb, p.getLastPhoneme(notes[0], vb), nc.consonant, 60, "", true);
-    return { ms: notes[0].msLength, tail: p.getVCTargetLength(notes[0], vc, nc) };
+    const vc = p.getOtoRecord(
+      vb,
+      p.getLastPhoneme(notes[0], vb),
+      nc.consonant,
+      60,
+      "",
+      true,
+    );
+    return {
+      ms: notes[0].msLength,
+      tail: p.getVCTargetLength(notes[0], vc, nc),
+    };
   };
 
   it("keeps the tail piece to about a third of a fast note so the vowel has room", () => {
@@ -253,15 +318,24 @@ describe("the tail piece gets the pitch of its own time span, not the end of the
     const p = new EnglishARPAbetPhonemizer();
     const mk = (lyric: string, notenum: number) => {
       const n = new Note();
-      n.lyric = lyric; n.tempo = 150; n.notenum = notenum; n.length = 240; n.phonemizer = p;
+      n.lyric = lyric;
+      n.tempo = 150;
+      n.notenum = notenum;
+      n.length = 240;
+      n.phonemizer = p;
       return n;
     };
-    const notes = [mk("I", 72), mk("cat", 60), mk("R", 60)];
+    const notes = [mk("I", 72), mk("man", 60), mk("R", 60)];
     // @ts-ignore
-    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
     notes.forEach((n) => n.applyOto(vb));
     const params = p.getRequestParam(vb, notes[1], "", {
-      velocity: 100, intensity: 100, modulation: 0,
+      velocity: 100,
+      intensity: 100,
+      modulation: 0,
       envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
     });
     expect(params.length).toBe(2);
@@ -272,7 +346,14 @@ describe("the tail piece gets the pitch of its own time span, not the end of the
     // VCの先頭のピッチは、VCが実際に始まる時刻のピッチ(ピッチ列の先頭は-(preutter+stp)msの位置)
     const note = notes[1];
     const nc = (p as any).getNextConsonant(notes[2]);
-    const vcRec = (p as any).getOtoRecord(vb, (p as any).getLastPhoneme(note, vb), nc.consonant, 60, "", true);
+    const vcRec = (p as any).getOtoRecord(
+      vb,
+      (p as any).getLastPhoneme(note, vb),
+      nc.consonant,
+      60,
+      "",
+      true,
+    );
     const tail = p.getVCTargetLength(note, vcRec, nc);
     const vp = (p as any).vcAutoFitParam(note, vcRec, tail);
     const base = (note.atPreutter ?? 0) + (note.atStp ?? 0);
@@ -316,21 +397,34 @@ describe("two-consonant endings get a second tail piece (CC) when the note is lo
     const p = new EnglishARPAbetPhonemizer();
     const mk = (l: string, len: number) => {
       const n = new Note();
-      n.lyric = l; n.tempo = tempo; n.notenum = 60; n.length = len; n.phonemizer = p;
+      n.lyric = l;
+      n.tempo = tempo;
+      n.notenum = 60;
+      n.length = len;
+      n.phonemizer = p;
       return n;
     };
     const notes = [mk(lyric, length), mk("R", 480)];
     // @ts-ignore
-    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
     notes.forEach((n) => n.applyOto(vb));
     const params = p.getRequestParam(vb, notes[0], "", {
-      velocity: 100, intensity: 100, modulation: 0,
+      velocity: 100,
+      intensity: 100,
+      modulation: 0,
       envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
     });
     return { note: notes[0], params, count: p.getNotesCount(vb, notes[0]) };
   };
   const names = (r: ReturnType<typeof render>) =>
-    r.params.map((q, i) => (i === 0 ? r.note.atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs)));
+    r.params.map((q, i) =>
+      i === 0
+        ? r.note.atAlias
+        : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs),
+    );
 
   it("sins on a 400ms note plays CV, VC and CC", () => {
     const r = render("sins", 480);
@@ -341,12 +435,16 @@ describe("two-consonant endings get a second tail piece (CC) when the note is lo
   it("keeps the note's total length (pieces overlap by their own overlap)", () => {
     const r = render("sins", 480);
     const [cv, vc, cc] = r.params.map((q) => q.append as any);
-    const total = cv.length + (vc.length - vc.overlap) + (cc.length - cc.overlap);
+    const total =
+      cv.length + (vc.length - vc.overlap) + (cc.length - cc.overlap);
     expect(total).toBeCloseTo(r.note.outputMs, 6);
     // 単独のVCのとき(CCの無い語尾)と同じ長さになる
     const single = render("sin", 480);
     const [scv, svc] = single.params.map((q) => q.append as any);
-    expect(scv.length + (svc.length - svc.overlap)).toBeCloseTo(single.note.outputMs, 6);
+    expect(scv.length + (svc.length - svc.overlap)).toBeCloseTo(
+      single.note.outputMs,
+      6,
+    );
   });
 
   it("both tail pieces get at least 30ms", () => {
@@ -371,5 +469,105 @@ describe("two-consonant endings get a second tail piece (CC) when the note is lo
     expect(render("sins", 240).params.length).toBe(2); // 200ms
     expect(render("sin", 480).params.length).toBe(2);
     expect(render("sins", 240).count).toBe(2);
+  });
+});
+
+describe("a word-final stop gets its release piece (k -) before a rest", () => {
+  const render = (lyric: string, length: number, tempo = 150) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const mk = (l: string, len: number) => {
+      const n = new Note();
+      n.lyric = l;
+      n.tempo = tempo;
+      n.notenum = 60;
+      n.length = len;
+      n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk(lyric, length), mk("R", 480)];
+    // @ts-ignore
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
+    notes.forEach((n) => n.applyOto(vb));
+    const params = p.getRequestParam(vb, notes[0], "", {
+      velocity: 100,
+      intensity: 100,
+      modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    return { note: notes[0], params, count: p.getNotesCount(vb, notes[0]) };
+  };
+  const names = (r: ReturnType<typeof render>) =>
+    r.params.map((q, i) =>
+      i === 0
+        ? r.note.atAlias
+        : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs),
+    );
+
+  it("stick plays CV, VC and the k release", () => {
+    const r = render("stick", 360); // 300ms
+    expect(names(r)).toEqual(["t ih", "ih k", "k -"]);
+    expect(r.count).toBe(3);
+    const [cv, vc, rel] = r.params.map((q) => q.append as any);
+    expect(
+      cv.length + (vc.length - vc.overlap) + (rel.length - rel.overlap),
+    ).toBeCloseTo(r.note.outputMs, 6);
+  });
+  it("sip and up also get theirs; a nasal or vowel ending does not", () => {
+    expect(names(render("sip", 240))).toEqual(["s ih", "ih p", "p -"]);
+    expect(render("man", 360).params.length).toBe(2);
+    expect(render("you", 360).params.length).toBeLessThan(3); // 母音の語尾は`uw -`の1ピースまで
+  });
+});
+
+describe("velocity 150 leaves more room for the tail on short notes", () => {
+  it("counts the CV's fixed part after the consonant speed-up", () => {
+    const n = new Note();
+    n.lyric = "drink";
+    n.tempo = 150;
+    n.notenum = 60;
+    n.length = 240;
+    n.phonemizer = new EnglishARPAbetPhonemizer();
+    n.applyOto(vb);
+    const normal = fixedMs(n);
+    n.velocity = 150;
+    expect(fixedMs(n)).toBeCloseTo(normal * 2 ** -0.5, 6);
+  });
+});
+
+describe("a two-consonant ending followed by another word still gets its CC", () => {
+  it("sins + but plays CV, ih n and n z on a 400ms note", () => {
+    const p = new EnglishARPAbetPhonemizer();
+    const mk = (l: string, len: number) => {
+      const n = new Note();
+      n.lyric = l;
+      n.tempo = 150;
+      n.notenum = 60;
+      n.length = len;
+      n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk("sins", 480), mk("but", 480)];
+    // @ts-ignore
+    notes.forEach((n, i) => {
+      n.prev = notes[i - 1];
+      n.next = notes[i + 1];
+    });
+    notes.forEach((n) => n.applyOto(vb));
+    const params = p.getRequestParam(vb, notes[0], "", {
+      velocity: 100,
+      intensity: 100,
+      modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    expect(
+      params.map((q, i) =>
+        i === 0
+          ? notes[0].atAlias
+          : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs),
+      ),
+    ).toEqual(["s ih", "ih n", "n z"]);
   });
 });
