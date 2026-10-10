@@ -40,7 +40,12 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
   `&`=ae, `0`=er, `1`=ih, `x`=ah. Plain English-word USTs are never touched.
 - **Japanese (kana) songs**: on import, OpenUtau's `+` hold is merged into the previous note and kana the voicebank
   lacks (`を`, `うぃ`, `てぃ`, `ふぁ`...) are swapped for the closest romaji or kana alias it has. `っ` stays a short silence.
-  Only the first track of a multi-track `.ustx` is imported.
+  Only one track of a multi-track `.ustx` is imported: the one named `main` or `lead`, otherwise the first.
+- **Chinese lyrics** (one hanzi per note) are converted on import to the bank's toneless pinyin aliases (`!hua`, `!ya`), reading
+  multi-character words in context (`悲痛` = bei tong, `境地` = jing di) via `pinyin-pro`, which is loaded only when a song contains
+  Chinese. `ao`/`er` use `ao_zh`/`er_zh` when the bank has them.
+- **Sparse diphone banks**: when an English CV/VC sound is missing from the bank (e.g. CASE has no `s aw`, `f uh`, `v aa`), the
+  English ARPAbet phonemizer now uses the nearest vowel instead of going silent. Curly apostrophes (`I’d`) are read like straight ones.
 - **Lower High Notes** (Batch Process menu): drops every note above a chosen ceiling (F4 to G5, default D5) by whole
   octaves until it fits. Note names stay the same and per-note pitch curves are untouched; rests are ignored. Undoable.
 - Save as `.ust` or `.ustx` (opens in OpenUtau).

@@ -163,6 +163,7 @@ export const wordToSymbols = (
     const text = lyric
       .toLowerCase()
       .trim()
+      .replace(/[\u2018\u2019\u02bc]/g, "'")
       .replace(/^[,.;:?"“”()]+|[,.;:?"“”()]+$/g, "");
     const word = text.replace(/[^a-z']/g, "");
     if (word === "" || word !== text) return null;

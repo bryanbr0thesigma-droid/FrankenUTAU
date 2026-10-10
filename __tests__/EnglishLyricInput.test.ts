@@ -74,3 +74,11 @@ describe("English lyric input on an ARPAbet bank", () => {
     expect(aliases(["hello!"])).toEqual(["R"]);
   });
 });
+
+describe("typographic apostrophes", () => {
+  it("reads I’d and I'm like their straight-apostrophe spellings", () => {
+    expect(aliases(["I’d"])).toEqual(aliases(["I'd"]));
+    expect(aliases(["I’d"])).not.toEqual(["R"]);
+    expect(aliases(["don’t"])).toEqual(aliases(["don't"]));
+  });
+});

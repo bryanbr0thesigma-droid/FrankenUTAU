@@ -17,6 +17,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useMenu } from "../../../hooks/useMenu";
 import { LOG } from "../../../lib/Logging";
+import { convertHanziNotes } from "../../../lib/Chinese/hanziToPinyin";
 import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
 import { normalizeJapaneseNotes } from "../../../lib/Japanese/normalizeKana";
 import { dumpNotes } from "../../../lib/Note";
@@ -109,12 +110,32 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           "FooterProjectMenu"
         );
       }
+      const has = (a: string) => vb !== null && !!vb.getOtoRecord(a, 60, "");
+      /** 読込時に歌詞を整えた内容のお知らせ。まとめて1つ表示する */
+      const notices: string[] = [];
+      // 漢字(中国語)の歌詞は、音源のピンイン表記に変換する
+      const hanzi = vb !== null ? await convertHanziNotes(ust.notes, has) : null;
+      if (hanzi !== null) {
+        LOG.info(
+          `漢字をピンインに変換。${JSON.stringify({
+            converted: hanzi.converted,
+            missing: hanzi.missing,
+          })}`,
+          "FooterProjectMenu"
+        );
+        notices.push(
+          t("editor.footer.ustHanziConverted", {
+            converted: hanzi.converted,
+            missing: hanzi.missing,
+          })
+        );
+      }
       // VCCV音源向けのustをARPAbetのCVVC音源で歌わせる場合は、歌詞を音源のエイリアスに変換する
       const converted =
         vb !== null &&
         useMusicProjectStore.getState().phonemizer instanceof
           EnglishARPAbetPhonemizer
-          ? convertVccvNotes(ust.notes, (a) => !!vb.getOtoRecord(a, 60, ""))
+          ? convertVccvNotes(ust.notes, has)
           : null;
       if (converted !== null) {
         ust.notes = converted.notes;
@@ -127,8 +148,7 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           })}`,
           "FooterProjectMenu"
         );
-        snackBarStore.setSeverity("info");
-        snackBarStore.setValue(
+        notices.push(
           t("editor.footer.ustVccvConverted", {
             converted: converted.converted,
             merged: converted.merged,
@@ -136,12 +156,11 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
             approximated: converted.approximated,
           })
         );
-        snackBarStore.setOpen(true);
       }
       // かなの歌詞のustは、`+`の伸ばしや音源に無い外来音のかなを整える
       const japanese =
         converted === null && vb !== null
-          ? normalizeJapaneseNotes(ust.notes, (a) => !!vb.getOtoRecord(a, 60, ""))
+          ? normalizeJapaneseNotes(ust.notes, has)
           : null;
       if (japanese !== null) {
         ust.notes = japanese.notes;
@@ -153,14 +172,17 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           })}`,
           "FooterProjectMenu"
         );
-        snackBarStore.setSeverity("info");
-        snackBarStore.setValue(
+        notices.push(
           t("editor.footer.ustJapaneseNormalized", {
             merged: japanese.merged,
             remapped: japanese.remapped,
             rests: japanese.rests,
           })
         );
+      }
+      if (notices.length > 0) {
+        snackBarStore.setSeverity("info");
+        snackBarStore.setValue(notices.join(" "));
         snackBarStore.setOpen(true);
       }
       setNotes(ust.notes);

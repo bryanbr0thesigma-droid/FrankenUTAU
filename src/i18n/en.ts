@@ -351,6 +351,8 @@ export const translationEn = {
         "This UST was written for a VCCV voicebank. Converted {{converted}} lyrics to this voicebank's ARPAbet names ({{approximated}} of them use a similar vowel because the voicebank lacks that recording), merged {{merged}} held vowels and silenced {{rests}} pieces it has no sound for (consonant clusters, etc.).",
       ustJapaneseNormalized:
         "Merged {{merged}} \"+\" holds into the previous note ({{rests}} had nothing to extend and became rests) and replaced {{remapped}} kana this voicebank lacks with the closest available sound.",
+      ustHanziConverted:
+        "Converted {{converted}} Chinese characters to pinyin ({{missing}} had no matching sound in this voicebank).",
       verticalZoomIn: "Zoom In (Vertical)",
       verticalZoomOut: "Zoom Out (Vertical)",
       horizontalZoomIn: "Zoom In (Horizontal)",

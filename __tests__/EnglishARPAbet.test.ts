@@ -106,3 +106,30 @@ describe("romaji-style syllables and voicebank detection", () => {
     expect(out[1][0]).toBe("ae t");
   });
 });
+
+describe("sparse diphone banks: nearest vowel instead of silence", () => {
+  const missing = ["s aw", "f uh", "v aa"];
+  const sparseVb = {
+    getOtoRecord: (a: string) => (missing.includes(a) ? null : records.get(a) ?? null),
+  } as any;
+  const alias = (lyrics: string[]) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = lyrics.map((lyric) => {
+      const n = new Note();
+      n.lyric = lyric; n.tempo = 120; n.notenum = 60; n.length = 480; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(sparseVb));
+    return notes.map((n) => n.atAlias);
+  };
+  it("uses the exact alias when it exists", () => {
+    expect(alias(["so"])).toEqual(["s ow"]);
+  });
+  it("falls back to a close vowel when the exact CV is missing", () => {
+    // `full`の`f uh`は無いので、`uh`に近い母音(uw)の`f uw`を使う
+    expect(alias(["I", "full"])[1]).toBe("f uw");
+    expect(alias(["I", "sour"])[1]).toMatch(/^s (ow|aa|ao)$/);
+  });
+});

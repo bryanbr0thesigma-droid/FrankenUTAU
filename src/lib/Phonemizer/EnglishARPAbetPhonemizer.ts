@@ -12,28 +12,46 @@ import {
   type CvContext,
 } from "../English/EnglishPhonemizerBase";
 import type { PhonemeScheme } from "../English/EnglishG2p";
+import { similarVowels } from "../English/similarVowels";
 
 export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
   name = "phonemizer.EnglishARPAbetPhonemizer";
   protected readonly scheme: PhonemeScheme = "arpa";
   protected readonly closesVowels = true;
 
+  /**
+   * 音源にその組み合わせの録音が無いとき(`s aw`など、ダイフォン音源には欠けがある)に、
+   * 無音にする代わりに使う近い母音の候補。無印の母音単独へ落ちる前に試す。
+   */
+  private nearVowels(v: string): string[] {
+    return similarVowels[v] ?? [];
+  }
+
   protected cvCandidates({ onset, v, isExt, prevV }: CvContext): CvCandidate[] {
-    if (isExt) return [{ alias: v, lead: null }];
+    if (isExt) {
+      return [v, ...this.nearVowels(v)].map((alias) => ({ alias, lead: null }));
+    }
     if (onset.length === 0) {
-      return prevV === null
-        ? [{ alias: `- ${v}`, lead: null }, { alias: v, lead: null }]
-        : [{ alias: `${prevV} ${v}`, lead: null }, { alias: v, lead: null }];
+      const heads = (x: string) => (prevV === null ? `- ${x}` : `${prevV} ${x}`);
+      return [
+        ...[v, ...this.nearVowels(v)].map((x) => ({ alias: heads(x), lead: null })),
+        { alias: v, lead: null },
+      ];
     }
     const last = onset[onset.length - 1];
-    const cands: CvCandidate[] = [
-      { alias: `${last} ${v}`, lead: prevV === null ? null : onset[0] },
-    ];
+    const lead = prevV === null ? null : onset[0];
+    const cands: CvCandidate[] = [v, ...this.nearVowels(v)].map((x) => ({
+      alias: `${last} ${x}`,
+      lead,
+    }));
     if (prevV === null) cands.push({ alias: v, lead: null });
     return cands;
   }
 
   protected vcCandidates(prev: string, c: string): string[] {
-    return c === VOWEL_END ? [`${prev} -`] : [`${prev} ${c}`];
+    if (c === VOWEL_END) {
+      return [prev, ...this.nearVowels(prev)].map((x) => `${x} -`);
+    }
+    return [prev, ...this.nearVowels(prev)].map((x) => `${x} ${c}`);
   }
 }
