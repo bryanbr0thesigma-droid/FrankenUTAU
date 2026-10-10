@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useMenu } from "../../../hooks/useMenu";
 import { LOG } from "../../../lib/Logging";
 import { convertHanziNotes } from "../../../lib/Chinese/hanziToPinyin";
+import { speedUpShortNotes } from "../../../lib/English/fastNoteVelocity";
 import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
 import { normalizeJapaneseNotes } from "../../../lib/Japanese/normalizeKana";
 import { dumpNotes } from "../../../lib/Note";
@@ -179,6 +180,15 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
             rests: japanese.rests,
           })
         );
+      }
+      // ARPAbet音源で英語を歌わせるときは、短いノートの子音速度を上げて聞き取りやすくする
+      if (
+        vb !== null &&
+        useMusicProjectStore.getState().phonemizer instanceof
+          EnglishARPAbetPhonemizer &&
+        speedUpShortNotes(ust.notes) > 0
+      ) {
+        ust.notes.forEach((n) => n.applyOto(vb));
       }
       if (notices.length > 0) {
         snackBarStore.setSeverity("info");
