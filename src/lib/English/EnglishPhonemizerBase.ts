@@ -9,8 +9,8 @@
  * - `!`を含む歌詞や英単語として解釈できない歌詞は、エイリアスとしてそのまま検索する。
  */
 import type OtoRecord from "utauoto/dist/OtoRecord";
-import type { ConsonantParam } from "../Phonemizer/JPAutoPhonemizer";
-import { JPAutoPhonemizer } from "../Phonemizer/JPAutoPhonemizer";
+import type { ConsonantParam, ExtraTail } from "../Phonemizer/JPAutoPhonemizer";
+import { JPAutoPhonemizer, fixedPartMs, knob } from "../Phonemizer/JPAutoPhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
 import {
@@ -39,10 +39,27 @@ export type CvContext = {
 
 type NoteInfo = { lead: string | null };
 
-const stops = new Set(["b", "d", "g", "k", "p", "t", "dd", "dx", "q", "ch", "j", "jh"]);
+const stops = new Set([
+  "b",
+  "d",
+  "g",
+  "k",
+  "p",
+  "t",
+  "dd",
+  "dx",
+  "q",
+  "ch",
+  "j",
+  "jh",
+]);
 
 const isPlus = (n: Note | undefined) =>
   n !== undefined && n.lyric !== undefined && n.lyric.startsWith("+");
+
+/** CVの固定部分の長さ(ms)。子音速度(velocity)で縮む分を反映する */
+export const fixedMs = (note: Note): number =>
+  (note.oto?.velocity ?? 0) * note.velocityRate;
 
 /** 短いノートで末尾VCを縮めるときの下限(ms)。これより短いと子音が聞き取れないので省く */
 export const MIN_TAIL_MS = 30;
@@ -67,7 +84,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
   protected abstract vcCandidates(
     prev: string,
     c: string,
-    ending: boolean
+    ending: boolean,
   ): string[];
 
   private info = new WeakMap<Note, NoteInfo>();
@@ -126,7 +143,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     vb: BaseVoiceBank,
     alias: string,
     notenum: number,
-    color: string
+    color: string,
   ): OtoRecord | null {
     const base = vb.getOtoRecord(alias, notenum, color);
     if (base) return base;
@@ -173,7 +190,11 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
         }
       }
     } else if (note.lyric !== "R") {
-      record = vb.getOtoRecord(note.lyric.replace("!", ""), note.notenum, color);
+      record = vb.getOtoRecord(
+        note.lyric.replace("!", ""),
+        note.notenum,
+        color,
+      );
     }
     this.info.set(note, { lead });
     if (record === null || record === undefined) {
@@ -235,7 +256,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     lyric,
     notenum,
     voiceColor,
-    vcMode: boolean = false
+    vcMode: boolean = false,
   ): OtoRecord | null {
     if (lyric === "") return null;
     if (!vcMode) return vb.getOtoRecord(lyric, notenum, voiceColor);
@@ -249,25 +270,46 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
   }
 
   /**
-   * 語尾に子音が2つ以上続くとき(`sins`の`n z`、`list`の`s t`)、末尾VC(`ih n`)の後ろに続ける
-   * 子音連続のピース(`n z`)。VCだけでは最後の子音が落ちて`sin`や`liss`に聞こえる。
-   * 音源にそのピースが無いとき、またはVCが次のCVへの繋ぎ(語尾でない)のときは付けない。
+   * 末尾VCの後ろに続ける、もう1つのピース。
+   * - 子音が2つ以上続く音節(`sins`の`n z`、`list`の`s t`)は、子音連続のピース(`n z`)。
+   *   VCだけでは最後の子音が落ちて`sin`や`liss`に聞こえる。
+   * - 語尾が単独の閉鎖音で、直後が休符のとき(`stick`の`k`、`sip`の`p`)は、解放のピース(`k -`)。
+   *   閉鎖音のVC(`ih k`)は、母音が消えたあとの無音(閉鎖)までしか録音されておらず、
+   *   破裂の音は`k -`にある。無いと`sti`、`sii`のように聞こえる。
+   * 音源にそのピースが無いときは付けない。
    */
   protected getExtraTail(
     vb: BaseVoiceBank,
     note: Note,
-    nextConsonant: ConsonantParam | null
-  ): OtoRecord | null {
+    nextConsonant: ConsonantParam | null,
+  ): ExtraTail | null {
     const cur = this.syllableOf(note);
     if (!cur || !cur.hasCoda || !nextConsonant) return null;
     const coda = cur.syl.coda;
-    if (coda.length < 2 || nextConsonant.consonant !== `${coda[0]}-`) return null;
-    return this.findRecord(
-      vb,
-      `${coda[0]} ${coda[1]}`,
-      note.notenum,
-      note.voiceColor ? note.voiceColor : ""
-    );
+    const color = note.voiceColor ? note.voiceColor : "";
+    const find = (alias: string) =>
+      this.findRecord(vb, alias, note.notenum, color);
+    const ending = nextConsonant.consonant.endsWith("-");
+    const tailed = nextConsonant.consonant.replace(/-$/, "") === coda[0];
+    if (coda.length >= 2 && tailed && (ending || knob("ccNonEnding"))) {
+      const record = find(`${coda[0]} ${coda[1]}`);
+      return record ? { record, kind: "cluster" } : null;
+    }
+    if (knob("release") && coda.length === 1 && ending && tailed && stops.has(coda[0])) {
+      const record = find(`${coda[0]} -`);
+      return record ? { record, kind: "release" } : null;
+    }
+    // 語尾の子音の後に、子音連続で始まる語(`bit`+`slow`)が続くとき、末尾VCは語尾の子音で埋まって、
+    // 語頭の子音(`s`)を鳴らす場所が無く、`low`と聞こえる。語尾の子音からその子音への繋ぎ(`t s`)を足す
+    if (knob("lead") && coda.length === 1 && !ending && tailed && note.next) {
+      const next = this.syllableOf(note.next);
+      const lead = this.info.get(note.next)?.lead;
+      if (next && next.syl.onset.length >= 2 && lead) {
+        const record = find(`${coda[0]} ${lead}`);
+        return record ? { record, kind: "lead" } : null;
+      }
+    }
+    return null;
   }
 
   /**
@@ -278,16 +320,20 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
   getVCTargetLength(
     note: Note,
     vcOtoRecord: OtoRecord,
-    consonantParam: ConsonantParam
+    consonantParam: ConsonantParam,
   ): number {
     const full = note.next?.oto
       ? super.getVCTargetLength(note, vcOtoRecord, consonantParam)
       : consonantParam.lengthValue;
-    const available = note.targetLength - (note.oto?.velocity ?? 0);
-    const fitted = full > available && available >= MIN_TAIL_MS ? available : full;
+    const available = note.targetLength - fixedPartMs(note);
+    const fitted =
+      full > available && available >= MIN_TAIL_MS ? available : full;
     // 末尾VCがノートの大半を占めると母音に時間が残らず、早い曲で聞き取れなくなる。
     // ノート長のTAIL_FRACTION(35%)を上限にする(聞き比べで、無制限・50%より明瞭だった)
-    const capped = Math.min(fitted, Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION));
+    const capped = Math.min(
+      fitted,
+      Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION),
+    );
     return capped;
   }
 }
