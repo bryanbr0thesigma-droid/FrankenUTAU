@@ -310,3 +310,66 @@ describe("joining from the previous word's last consonant", () => {
     expect(sing(["slice", "it", "R"])[1][0]).toBe("s ih");
   });
 });
+
+describe("two-consonant endings get a second tail piece (CC) when the note is long enough", () => {
+  const render = (lyric: string, length: number, tempo = 150) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const mk = (l: string, len: number) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = tempo; n.notenum = 60; n.length = len; n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk(lyric, length), mk("R", 480)];
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    const params = p.getRequestParam(vb, notes[0], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    return { note: notes[0], params, count: p.getNotesCount(vb, notes[0]) };
+  };
+  const names = (r: ReturnType<typeof render>) =>
+    r.params.map((q, i) => (i === 0 ? r.note.atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs)));
+
+  it("sins on a 400ms note plays CV, VC and CC", () => {
+    const r = render("sins", 480);
+    expect(names(r)).toEqual(["s ih", "ih n", "n z"]);
+    expect(r.count).toBe(r.params.length);
+  });
+
+  it("keeps the note's total length (pieces overlap by their own overlap)", () => {
+    const r = render("sins", 480);
+    const [cv, vc, cc] = r.params.map((q) => q.append as any);
+    const total = cv.length + (vc.length - vc.overlap) + (cc.length - cc.overlap);
+    expect(total).toBeCloseTo(r.note.outputMs, 6);
+    // 単独のVCのとき(CCの無い語尾)と同じ長さになる
+    const single = render("sin", 480);
+    const [scv, svc] = single.params.map((q) => q.append as any);
+    expect(scv.length + (svc.length - svc.overlap)).toBeCloseTo(single.note.outputMs, 6);
+  });
+
+  it("both tail pieces get at least 30ms", () => {
+    const r = render("sins", 480);
+    const [, vc, cc] = r.params.map((q) => q.append as any);
+    expect(vc.length).toBeGreaterThan(30);
+    expect(cc.length).toBeGreaterThan(30);
+  });
+
+  it("the CC piece takes the pitch of the time it starts", async () => {
+    const { decodePitch } = await import("../src/utils/pitch");
+    const r = render("sins", 480);
+    expect(r.params.length).toBe(3);
+    const cv = decodePitch(r.params[0].resamp!.pitches as string);
+    const cc = decodePitch(r.params[2].resamp!.pitches as string);
+    expect(cc.length).toBeGreaterThan(0);
+    // 先頭のピッチが、CVのピッチ列にある値と同じ位置(ノート後半)から始まる
+    expect(cv).toContain(cc[0]);
+  });
+
+  it("falls back to the single tail on a short note, and never adds CC to a one-consonant ending", () => {
+    expect(render("sins", 240).params.length).toBe(2); // 200ms
+    expect(render("sin", 480).params.length).toBe(2);
+    expect(render("sins", 240).count).toBe(2);
+  });
+});

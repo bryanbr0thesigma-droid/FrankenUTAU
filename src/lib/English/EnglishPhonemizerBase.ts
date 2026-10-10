@@ -249,6 +249,28 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
   }
 
   /**
+   * 語尾に子音が2つ以上続くとき(`sins`の`n z`、`list`の`s t`)、末尾VC(`ih n`)の後ろに続ける
+   * 子音連続のピース(`n z`)。VCだけでは最後の子音が落ちて`sin`や`liss`に聞こえる。
+   * 音源にそのピースが無いとき、またはVCが次のCVへの繋ぎ(語尾でない)のときは付けない。
+   */
+  protected getExtraTail(
+    vb: BaseVoiceBank,
+    note: Note,
+    nextConsonant: ConsonantParam | null
+  ): OtoRecord | null {
+    const cur = this.syllableOf(note);
+    if (!cur || !cur.hasCoda || !nextConsonant) return null;
+    const coda = cur.syl.coda;
+    if (coda.length < 2 || nextConsonant.consonant !== `${coda[0]}-`) return null;
+    return this.findRecord(
+      vb,
+      `${coda[0]} ${coda[1]}`,
+      note.notenum,
+      note.voiceColor ? note.voiceColor : ""
+    );
+  }
+
+  /**
    * 末尾VCの長さ。短いノートでは、VCが収まらないとVCごと省かれて語尾の子音が鳴らなくなるので、
    * CVの固定部分を除いて残る長さまで縮めて、子音を残す。残りが短すぎる(MIN_TAIL_MS未満)ときは省く。
    * さらに、ノート長のTAIL_FRACTIONを上限にして、母音に時間を残す。

@@ -8,6 +8,9 @@ import { BasePhonemizer } from "../BasePhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
 
+/** 末尾のVCとCCに、それぞれ最低限残す長さ(ms)。これより短いとCCは省く */
+const MIN_EXTRA_TAIL_MS = 30;
+
 const reg = /^([^ぁ-んァ-ヶ]*)([ぁ-んァ-ヶ]+)([^ ]*)$/;
 const VCVCheck = /[-aiuron] ([ぁ-んァ-ヶ]+)/;
 const vowelA =
@@ -500,11 +503,40 @@ export class JPAutoPhonemizer extends BasePhonemizer {
       note.voiceColor ? note.voiceColor : "",
       true
     );
-    if (vcOtoRecord !== null) {
-      return 2;
-    } else {
-      return 1;
+    if (vcOtoRecord === null) return 1;
+    // 末尾にCCも続けるピースの数。実際に使うときだけ数える
+    if (nextConsonant && note.oto) {
+      const target = this.getVCTargetLength(note, vcOtoRecord, nextConsonant);
+      if (
+        target <= note.targetLength - note.oto.velocity &&
+        this.planExtraTail(vb, note, nextConsonant, target) !== null
+      ) {
+        return 3;
+      }
     }
+    return 2;
+  }
+
+  /**
+   * 末尾VCの後ろにCCを続ける場合の、CCのレコードと、VCとCCそれぞれの長さ(ms)。続けないならnull。
+   * VCのプリウタランス位置から数えた残り長さTを、T = T1(VC) + T2(CC) + (CCのpre - CCのoverlap)に分ける。
+   */
+  private planExtraTail(
+    vb: BaseVoiceBank,
+    note: Note,
+    nextConsonant: ConsonantParam | null,
+    target: number
+  ): { record: OtoRecord; t1: number; t2: number } | null {
+    const record = this.getExtraTail(vb, note, nextConsonant);
+    if (record === null) return null;
+    const net = record.pre - record.overlap;
+    if (!Number.isFinite(net)) return null;
+    const budget = target - net;
+    const t1 = Math.floor(budget / 2);
+    const t2 = budget - t1;
+    return t1 >= MIN_EXTRA_TAIL_MS && t2 >= MIN_EXTRA_TAIL_MS
+      ? { record, t1, t2 }
+      : null;
   }
 
   protected _getRequestParamm(
@@ -550,6 +582,17 @@ export class JPAutoPhonemizer extends BasePhonemizer {
       );
       if (vcTargetNoteLength <= note.targetLength - (note.oto?.velocity ?? 0)) {
         params.push({ resamp: undefined, append: undefined });
+        /**
+         * 末尾VCの後ろに子音連続のピース(CC)を続けるときは、VCのプリウタランス位置から数えた残り長さTを、
+         * T = T1(VC) + T2(CC) + (CCのpre - CCのoverlap)に分ける。
+         */
+        const cc = this.planExtraTail(vb, note, nextConsonant, vcTargetNoteLength);
+        const useCc = cc !== null;
+        const ccRecord = cc?.record;
+        const ccT1 = cc?.t1 ?? 0;
+        const ccT2 = cc?.t2 ?? 0;
+        /** VCピースの長さ(プリウタランスを除く) */
+        const vcPieceTargetLength = useCc ? ccT1 : vcTargetNoteLength;
         const baseNotePitchOffset =
           (note.atPreutter ? note.atPreutter : 0) +
           (note.atStp ? note.atStp : 0);
@@ -584,7 +627,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
               : flags,
           offsetMs: Math.max(0, vcOtoRecord.offset),
           targetMs:
-            Math.ceil((vcTargetNoteLength + vcParams.preutter) / 50) * 50,
+            Math.ceil((vcPieceTargetLength + vcParams.preutter) / 50) * 50,
           fixedMs: vcOtoRecord.velocity,
           cutoffMs: vcOtoRecord.blank,
           intensity:
@@ -604,23 +647,63 @@ export class JPAutoPhonemizer extends BasePhonemizer {
         } as ResampRequest;
         params[1]["append"] = {
           stp: vcParams.stp,
-          length: vcTargetNoteLength + vcParams.preutter,
+          length: vcPieceTargetLength + vcParams.preutter,
           envelope: {
             point: [
               0,
               vcParams.overlap,
-              nextConsonant.crossfade ? vcTargetNoteLength : 10,
+              useCc
+                ? Math.max(ccRecord.overlap, 10)
+                : nextConsonant.crossfade
+                ? vcTargetNoteLength
+                : 10,
               0,
             ],
             value: [0, 100, 100, 0],
           },
           overlap: vcParams.overlap,
         } as AppendRequestBase;
-        cvOutputMs =
-          cvOutputMs -
-          vcTargetNoteLength -
-          vcParams.preutter +
-          vcParams.overlap;
+        let tailMs = vcPieceTargetLength + vcParams.preutter;
+        if (useCc) {
+          const ccStartMs =
+            baseNotePitchOffset + dividerOffset + ccT1 - ccRecord.overlap;
+          params.push({
+            resamp: {
+              inputWav:
+                ccRecord.dirpath !== ""
+                  ? ccRecord.dirpath + "/" + ccRecord.filename
+                  : ccRecord.filename,
+              targetTone: noteNumToTone(note.notenum),
+              velocity: 100,
+              flags: params[1]["resamp"].flags,
+              offsetMs: Math.max(0, ccRecord.offset),
+              targetMs: Math.ceil((ccT2 + ccRecord.pre) / 50) * 50,
+              fixedMs: ccRecord.velocity,
+              cutoffMs: ccRecord.blank,
+              intensity: params[1]["resamp"].intensity,
+              modulation: params[1]["resamp"].modulation,
+              tempo: `!${note.tempo.toFixed(2)}`,
+              pitches: encodePitch(
+                pitchFromIndex(
+                  cvPitch,
+                  Math.floor(ccStartMs / 1000 / note.pitchSpan)
+                )
+              ),
+            } as ResampRequest,
+            append: {
+              stp: 0,
+              length: ccT2 + ccRecord.pre,
+              envelope: {
+                point: [0, ccRecord.overlap, 10, 0],
+                value: [0, 100, 100, 0],
+              },
+              overlap: ccRecord.overlap,
+            } as AppendRequestBase,
+          });
+          // CCはVCの終わりにccRecord.overlapだけ重なって続く
+          tailMs += ccT2 + ccRecord.pre - ccRecord.overlap;
+        }
+        cvOutputMs = cvOutputMs - tailMs + vcParams.overlap;
         if (nextConsonant.crossfade) {
           cvEnvelope.point[1] = vcTargetNoteLength;
         }
@@ -698,6 +781,18 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     }
 
     return params;
+  }
+
+  /**
+   * 末尾VCの後ろに続ける子音連続(CC)のピース。基本は無し。
+   * 語尾に子音が2つ続く英単語(`sins`の`n z`)を、サブクラスが返す。
+   */
+  protected getExtraTail(
+    vb: BaseVoiceBank,
+    note: Note,
+    nextConsonant: ConsonantParam | null
+  ): OtoRecord | null {
+    return null;
   }
 
   getVCTargetLength(
