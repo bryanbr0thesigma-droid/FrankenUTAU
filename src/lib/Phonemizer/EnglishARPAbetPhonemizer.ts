@@ -84,8 +84,12 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
     if (c === VOWEL_END) {
       return [prev, ...(similarVowels[prev] ?? [])].map((x) => `${x} -`);
     }
-    // `g`の録音が無いとき(`uh g`)は、`k`より有声の`d`を先に代用する(sugarが「sharp cutoff」になるのを避ける)
-    const table = { ...similarConsonants, g: ["d", "k"] };
+    // 母音の間の`g`(sugar)で`uh g`が無いときは、`k`より有声の`d`を先に代用する(`g~`の印。sharp cutoffを避ける)
+    const voicedG = c === "g~";
+    if (voicedG) c = "g";
+    const table = voicedG
+      ? { ...similarConsonants, g: ["d", "k"] }
+      : similarConsonants;
     return this.pairs(
       this.near([c], table),
       [prev, ...(similarVowels[prev] ?? [])],

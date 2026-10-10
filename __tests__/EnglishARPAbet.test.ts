@@ -514,3 +514,31 @@ describe("n before a t cluster", () => {
     expect(aliasOf(params[1].resamp!.inputWav, params[1].resamp!.offsetMs)).toBe("ih t");
   });
 });
+
+describe("rules stay narrow: only the contexts that were listened to", () => {
+  const first = (lyrics: string[], lens: number[]) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = lyrics.map((l, i) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = lens[i]; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    return p.getRequestParam(vb, notes[0], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    }).map((q, i) => (i === 0 ? notes[0].atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs)));
+  };
+  it("only s + k uses the s k piece; slice/strain keep ay s", () => {
+    expect(first(["my", "strain", "R"], [240, 480, 480])[1]).toBe("ay s");
+    expect(first(["my", "slow", "R"], [240, 480, 480])[1]).toBe("ay s");
+  });
+  it("n skips to t only before t (down drink keeps n)", () => {
+    expect(first(["down", "drink", "R"], [480, 480, 480])[1]).toBe("aw n");
+  });
+  it("a stop before a vowel-initial word gets no extra release (but I)", () => {
+    expect(first(["but", "I", "R"], [480, 480, 480]).length).toBe(2);
+  });
+});

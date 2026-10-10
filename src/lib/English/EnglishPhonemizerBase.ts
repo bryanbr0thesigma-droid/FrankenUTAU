@@ -264,7 +264,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
         coda[0] === "n" &&
         nextIsSyllable &&
         (this.syllableOf(next)?.syl.onset.length ?? 0) >= 2 &&
-        ["t", "d"].includes(this.info.get(next)?.lead ?? "")
+        this.info.get(next)?.lead === "t"
       ) {
         // `in`+`trest`は、`n`を省いて`t`へ繋ぐ(鼻音と`t`は同じ位置で作る音)
         consonant = this.info.get(next)!.lead;
@@ -283,7 +283,12 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       consonant = this.info.get(next)?.lead ?? null;
       // 次が`s`+子音(skull)のとき、短い`ay s`では`s`が聞こえず`kull`になるので、子音連続`s k`のピースで繋ぐ
       const nsyl = this.syllableOf(next)?.syl;
-      if (consonant === "s" && nsyl && nsyl.onset.length >= 2) {
+      if (
+        consonant === "s" &&
+        nsyl &&
+        nsyl.onset.length >= 2 &&
+        nsyl.onset[1] === "k"
+      ) {
         consonant = `s ${nsyl.onset[1]}`;
       }
     } else if (this.closesVowels && cur.atWordEnd && next.lyric === "R") {
@@ -296,8 +301,15 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       };
     }
     if (!consonant) return null;
+    // 母音の間の`g`(sugar)は、`uh g`が無いとき有声の`d`で代用する。印は`~`(語頭が`gr`のような子音連続のときは付けない)
+    const voicedG =
+      this.scheme === "arpa" &&
+      !ending &&
+      consonant === "g" &&
+      nextIsSyllable &&
+      (this.syllableOf(next)?.syl.onset.length ?? 0) === 1;
     return {
-      consonant: ending ? `${consonant}-` : consonant,
+      consonant: ending ? `${consonant}-` : voicedG ? "g~" : consonant,
       cvs: [],
       type: ending ? "value" : stops.has(consonant) ? "stretch" : "preutter",
       lengthValue: stops.has(consonant) ? 80 : 120,
@@ -355,7 +367,9 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       coda.length === 1 &&
       stops.has(coda[0]) &&
       tailed &&
-      note.msLength >= MIN_RELEASE_NOTE_MS
+      note.msLength >= MIN_RELEASE_NOTE_MS &&
+      // 母音で始まる語の前は、次のノートの`t ih`のような繋ぎにも破裂があり、`t`が二重になる
+      (ending || (this.syllableOf(note.next)?.syl.onset.length ?? 0) > 0)
     ) {
       const record = find(`${coda[0]} -`);
       return record ? { record, kind: "release" } : null;
