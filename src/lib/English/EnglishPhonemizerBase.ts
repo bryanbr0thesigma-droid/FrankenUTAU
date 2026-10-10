@@ -47,6 +47,9 @@ const isPlus = (n: Note | undefined) =>
 /** 短いノートで末尾VCを縮めるときの下限(ms)。これより短いと子音が聞き取れないので省く */
 export const MIN_TAIL_MS = 30;
 
+/** 末尾VCの長さの上限を、ノート長に対する割合で表したもの */
+export const TAIL_FRACTION = 0.35;
+
 /** 母音で終わる語尾を表す、末尾VCの擬似子音 */
 export const VOWEL_END = "-";
 
@@ -242,6 +245,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
   /**
    * 末尾VCの長さ。短いノートでは、VCが収まらないとVCごと省かれて語尾の子音が鳴らなくなるので、
    * CVの固定部分を除いて残る長さまで縮めて、子音を残す。残りが短すぎる(MIN_TAIL_MS未満)ときは省く。
+   * さらに、ノート長のTAIL_FRACTIONを上限にして、母音に時間を残す。
    */
   getVCTargetLength(
     note: Note,
@@ -253,11 +257,8 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       : consonantParam.lengthValue;
     const available = note.targetLength - (note.oto?.velocity ?? 0);
     const fitted = full > available && available >= MIN_TAIL_MS ? available : full;
-    // 実験用: ノート長に対する末尾VCの長さの上限(割合)。早い曲で母音に時間を残すため
-    const frac = (globalThis as { __FRANKEN_TAIL_FRACTION?: number })
-      .__FRANKEN_TAIL_FRACTION;
-    return typeof frac === "number" && frac > 0
-      ? Math.min(fitted, Math.max(MIN_TAIL_MS, note.msLength * frac))
-      : fitted;
+    // 末尾VCがノートの大半を占めると母音に時間が残らず、早い曲で聞き取れなくなる。
+    // ノート長のTAIL_FRACTION(35%)を上限にする(聞き比べで、無制限・50%より明瞭だった)
+    return Math.min(fitted, Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION));
   }
 }

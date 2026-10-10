@@ -209,3 +209,34 @@ describe("diphthong stand-ins start like the diphthong", () => {
     expect(out[1][0]).toBe("aw er");
   });
 });
+
+describe("tail length cap (35% of the note)", () => {
+  const tailMs = (tempo: number, length: number) => {
+    const p: any = new EnglishARPAbetPhonemizer();
+    const mk = (lyric: string) => {
+      const n = new Note();
+      n.lyric = lyric; n.tempo = tempo; n.notenum = 60; n.length = length; n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk("cat"), mk("R")];
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    notes.forEach((n) => n.autoFitParam());
+    const nc = p.getNextConsonant(notes[1]);
+    const vc = p.getOtoRecord(vb, p.getLastPhoneme(notes[0], vb), nc.consonant, 60, "", true);
+    return { ms: notes[0].msLength, tail: p.getVCTargetLength(notes[0], vc, nc) };
+  };
+
+  it("keeps the tail piece to about a third of a fast note so the vowel has room", () => {
+    const { ms, tail } = tailMs(150, 240); // 200ms
+    expect(tail).toBeLessThanOrEqual(ms * 0.35 + 0.001);
+  });
+  it("never goes below the 30 ms floor", () => {
+    expect(tailMs(150, 60).tail).toBeGreaterThanOrEqual(30);
+  });
+  it("leaves a long note's natural tail length alone", () => {
+    const { tail } = tailMs(60, 1920);
+    expect(tail).toBeGreaterThan(60);
+  });
+});
