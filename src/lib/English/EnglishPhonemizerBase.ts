@@ -9,7 +9,7 @@
  * - `!`を含む歌詞や英単語として解釈できない歌詞は、エイリアスとしてそのまま検索する。
  */
 import type OtoRecord from "utauoto/dist/OtoRecord";
-import type { ConsonantParam } from "../Phonemizer/JPAutoPhonemizer";
+import type { ConsonantParam, ExtraTail } from "../Phonemizer/JPAutoPhonemizer";
 import { JPAutoPhonemizer } from "../Phonemizer/JPAutoPhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
@@ -282,25 +282,32 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     vb: BaseVoiceBank,
     note: Note,
     nextConsonant: ConsonantParam | null,
-  ): OtoRecord | null {
+  ): ExtraTail | null {
     const cur = this.syllableOf(note);
     if (!cur || !cur.hasCoda || !nextConsonant) return null;
     const coda = cur.syl.coda;
     const color = note.voiceColor ? note.voiceColor : "";
+    const find = (alias: string) =>
+      this.findRecord(vb, alias, note.notenum, color);
     const ending = nextConsonant.consonant.endsWith("-");
-    if (
-      coda.length >= 2 &&
-      nextConsonant.consonant.replace(/-$/, "") === coda[0]
-    ) {
-      return this.findRecord(vb, `${coda[0]} ${coda[1]}`, note.notenum, color);
+    const tailed = nextConsonant.consonant.replace(/-$/, "") === coda[0];
+    if (coda.length >= 2 && tailed) {
+      const record = find(`${coda[0]} ${coda[1]}`);
+      return record ? { record, kind: "cluster" } : null;
     }
-    if (
-      coda.length === 1 &&
-      ending &&
-      stops.has(coda[0]) &&
-      nextConsonant.consonant === `${coda[0]}-`
-    ) {
-      return this.findRecord(vb, `${coda[0]} -`, note.notenum, color);
+    if (coda.length === 1 && ending && tailed && stops.has(coda[0])) {
+      const record = find(`${coda[0]} -`);
+      return record ? { record, kind: "release" } : null;
+    }
+    // 語尾の子音の後に、子音連続で始まる語(`bit`+`slow`)が続くとき、末尾VCは語尾の子音で埋まって、
+    // 語頭の子音(`s`)を鳴らす場所が無く、`low`と聞こえる。語尾の子音からその子音への繋ぎ(`t s`)を足す
+    if (coda.length === 1 && !ending && tailed && note.next) {
+      const next = this.syllableOf(note.next);
+      const lead = this.info.get(note.next)?.lead;
+      if (next && next.syl.onset.length >= 2 && lead) {
+        const record = find(`${coda[0]} ${lead}`);
+        return record ? { record, kind: "lead" } : null;
+      }
     }
     return null;
   }

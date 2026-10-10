@@ -13,8 +13,19 @@ const MIN_EXTRA_TAIL_MS = 30;
 /** 閉鎖音の解放ピースを続けるときの、VC側の閉鎖の長さと、解放の長さ(ms) */
 /** 子音連続のピースを付けるノートの最小の長さ(ms)。聞き比べで、400msでは明瞭、200msでは母音が足りなかった */
 const MIN_CC_NOTE_MS = 280;
+/** 次の語頭の子音連続へ繋ぐピースを続けるとき、語尾の子音のVCに残す長さ(ms) */
+const LEAD_VC_MS = 25;
 const RELEASE_CLOSURE_MS = 20;
 const RELEASE_MS = 60;
+
+/**
+ * 末尾VCの後ろに続けるピース。kindは、語尾の子音連続(`n z`)、閉鎖音の解放(`k -`)、
+ * 次のノートの子音連続の頭の子音への繋ぎ(`t s`)
+ */
+export type ExtraTail = {
+  record: OtoRecord;
+  kind: "cluster" | "release" | "lead";
+};
 
 const reg = /^([^ぁ-んァ-ヶ]*)([ぁ-んァ-ヶ]+)([^ ]*)$/;
 const VCVCheck = /[-aiuron] ([ぁ-んァ-ヶ]+)/;
@@ -540,13 +551,14 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     availableMs: number,
   ): { record: OtoRecord; t1: number; t2: number; target: number } | null {
     if (target > availableMs) return null;
-    const record = this.getExtraTail(vb, note, nextConsonant);
-    if (record === null) return null;
+    const extra = this.getExtraTail(vb, note, nextConsonant);
+    if (extra === null) return null;
+    const { record, kind } = extra;
     const net = record.pre - record.overlap;
     if (!Number.isFinite(net)) return null;
-    const isRelease = record.alias.endsWith(" -");
-    // 子音連続のピースは、母音に時間を残すため、短いノートには付けない
-    if (!isRelease && note.msLength < MIN_CC_NOTE_MS) return null;
+    const isRelease = kind === "release";
+    // 語尾の子音連続のピースは、母音に時間を残すため、短いノートには付けない
+    if (kind === "cluster" && note.msLength < MIN_CC_NOTE_MS) return null;
     // 必要な長さまでTを延ばす。ただしノートの大半を末尾に取られると母音が聞こえなくなるので、割合で上限を置く
     const wanted = isRelease
       ? net + RELEASE_CLOSURE_MS + RELEASE_MS
@@ -557,9 +569,15 @@ export class JPAutoPhonemizer extends BasePhonemizer {
       Math.max(target, note.msLength * (isRelease ? 0.5 : 0.4)),
     );
     const budget = total - net;
-    const t1 = isRelease ? RELEASE_CLOSURE_MS : Math.floor(budget / 2);
+    const t1 = isRelease
+      ? RELEASE_CLOSURE_MS
+      : kind === "lead"
+        ? LEAD_VC_MS
+        : Math.floor(budget / 2);
     const t2 = budget - t1;
-    return t1 >= (isRelease ? 0 : MIN_EXTRA_TAIL_MS) && t2 >= MIN_EXTRA_TAIL_MS
+    return t1 >=
+      (isRelease ? 0 : kind === "lead" ? LEAD_VC_MS : MIN_EXTRA_TAIL_MS) &&
+      t2 >= MIN_EXTRA_TAIL_MS
       ? { record, t1, t2, target: total }
       : null;
   }
@@ -825,7 +843,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     vb: BaseVoiceBank,
     note: Note,
     nextConsonant: ConsonantParam | null,
-  ): OtoRecord | null {
+  ): ExtraTail | null {
     return null;
   }
 
