@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Note } from "../src/lib/Note";
-import { NaturalPitchBatchProcess } from "../src/lib/BatchProcess/NaturalPitchBatchProcess";
+import { NaturalPitchBatchProcess, applyGlide } from "../src/lib/BatchProcess/NaturalPitchBatchProcess";
 
 const make = (spec: Array<[string, number, number]>) =>
   spec.map(([lyric, notenum, length]) => {
@@ -21,14 +21,18 @@ describe("NaturalPitchBatchProcess", () => {
     expect(out[3].pbw).toBeUndefined();
   });
 
-  it("adds a vibrato only to long notes and leaves rests alone", () => {
+  it("adds no vibrato (it sounded autotuned on long notes)", () => {
     const out = new NaturalPitchBatchProcess().process(
       make([["a", 60, 240], ["b", 62, 960], ["R", 60, 960]]),
       undefined as unknown as void
     );
-    expect(out[0].vibrato).toBeUndefined(); // 250ms at 120bpm (240 ticks)
-    expect(out[1].vibrato).toBeDefined();
-    expect(out[2].vibrato).toBeUndefined();
+    expect(out.every((n) => n.vibrato === undefined)).toBe(true);
+  });
+
+  it("applyGlide edits in place and counts the notes it changed", () => {
+    const notes = make([["a", 60, 480], ["b", 67, 480], ["c", 62, 480]]);
+    expect(applyGlide(notes)).toBe(2);
+    expect(notes[2].pbw).toEqual([80]);
   });
 
   it("does not touch notes that already have their own pitch, or the originals", () => {

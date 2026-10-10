@@ -21,6 +21,7 @@ import { convertHanziNotes } from "../../../lib/Chinese/hanziToPinyin";
 import { speedUpShortNotes } from "../../../lib/English/fastNoteVelocity";
 import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
 import { normalizeJapaneseNotes } from "../../../lib/Japanese/normalizeKana";
+import { applyGlide } from "../../../lib/BatchProcess/NaturalPitchBatchProcess";
 import { dumpNotes } from "../../../lib/Note";
 import { EnglishARPAbetPhonemizer } from "../../../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { undoManager } from "../../../lib/UndoManager";
@@ -91,7 +92,8 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
       LOG.info(`ustの読込開始`, "FooterMenu");
       const ust = new Ust();
       const buf = await file.arrayBuffer();
-      if (file.name.toLowerCase().endsWith(".ustx")) {
+      const isUstx = file.name.toLowerCase().endsWith(".ustx");
+      if (isUstx) {
         await ust.loadUstx(buf);
       } else {
         await ust.load(buf);
@@ -181,6 +183,8 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           })
         );
       }
+      // ustxのピッチは階段状でロボットのように聞こえるので、音が変わるところをなめらかにつなぐ
+      if (isUstx) applyGlide(ust.notes);
       // ARPAbet音源で英語を歌わせるときは、短いノートの子音速度を上げて聞き取りやすくする
       if (
         vb !== null &&

@@ -447,7 +447,7 @@ export const translationEn = {
     envelopeNormalize: "Envelope Normalization",
     pitchSnapBatchProcess: "Snap Pitch to Scale",
     naturalPitchBatchProcess: {
-      title: "Natural Pitch (Glide + Vibrato)",
+      title: "Smooth Pitch (Glide Between Notes)",
     },
     limitHighNotesBatchProcess: {
       title: "Lower High Notes",
