@@ -165,3 +165,38 @@ describe("short notes keep their tail consonant", () => {
     expect(paramCount(150, 10)).toBe(1);
   });
 });
+
+describe("joins after a consonant ending and missing consonants (CASE has no zh)", () => {
+  it("starts a vowel-initial word from the previous consonant, not from the previous vowel", () => {
+    // `slice it`: 以前は`ay ih`で、`ay`がもう一度鳴っていた
+    const out = sing(["slice", "it", "R"]);
+    expect(out[0][0]).toBe("l ay");
+    expect(out[0][1]).toBe("ay s");
+    expect(out[1][0]).toBe("s ih");
+  });
+
+  it("uses the last consonant of a cluster ending for that join", () => {
+    // `sides of`: 語尾はd z。ay dの後にz ahで繋ぐ
+    const out = sing(["sides", "of", "R"]);
+    expect(out[0][1]).toBe("ay d");
+    expect(out[1][0]).toBe("z ah");
+  });
+
+  it("still joins vowel to vowel when the previous word ends in a vowel", () => {
+    expect(sing(["I", "of", "R"])[1][0]).toBe("ay ah");
+  });
+
+  it("does not leave the second syllable of pleasure silent when zh is missing", () => {
+    const out = sing(["pleasure", "+", "R"]);
+    expect(out[0][0]).toBe("l eh");
+    // `zh`の録音は無いので、近い`sh`で代用する(以前は無音になっていた)
+    expect(out[1][0]).toMatch(/^(sh|jh|z) er$|^(sh|jh|z) (ah|uh|eh)$/);
+    expect(out[1][0]).not.toBe("R");
+  });
+
+  it("plays type as t ay + ay p", () => {
+    const out = sing(["type", "R"]);
+    expect(out[0][0]).toBe("t ay");
+    expect(out[0][1]).toBe("ay p");
+  });
+});

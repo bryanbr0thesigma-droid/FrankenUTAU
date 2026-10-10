@@ -18,3 +18,27 @@ export const similarVowels: Record<string, string[]> = {
   uh: ["uw", "ah", "ow"],
   uw: ["uh", "ow"],
 };
+
+/**
+ * 音源にその子音の録音が無いとき(CASEには`zh`が全く無い)に、無音にする代わりに使う近い子音。近い順。
+ * 有声・無声の対と、同じ位置で出す子音を選ぶ。
+ */
+export const similarConsonants: Record<string, string[]> = {
+  zh: ["sh", "jh", "z"],
+  jh: ["ch", "zh", "d"],
+  ch: ["sh", "jh", "t"],
+  sh: ["s", "ch", "zh"],
+  dh: ["d", "th", "z"],
+  th: ["s", "f", "dh"],
+  v: ["f", "b"],
+  f: ["v", "p"],
+  z: ["s", "zh", "dh"],
+  s: ["z", "sh"],
+  ng: ["n", "g"],
+  g: ["k", "d"],
+  k: ["g", "t"],
+  b: ["p", "v"],
+  p: ["b", "f"],
+  d: ["t", "dh"],
+  t: ["d", "k"],
+};

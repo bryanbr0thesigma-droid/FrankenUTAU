@@ -12,7 +12,7 @@ import {
   type CvContext,
 } from "../English/EnglishPhonemizerBase";
 import type { PhonemeScheme } from "../English/EnglishG2p";
-import { similarVowels } from "../English/similarVowels";
+import { similarConsonants, similarVowels } from "../English/similarVowels";
 
 export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
   name = "phonemizer.EnglishARPAbetPhonemizer";
@@ -20,38 +20,49 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
   protected readonly closesVowels = true;
 
   /**
-   * 音源にその組み合わせの録音が無いとき(`s aw`など、ダイフォン音源には欠けがある)に、
-   * 無音にする代わりに使う近い母音の候補。無印の母音単独へ落ちる前に試す。
+   * 音源にその組み合わせの録音が無いとき(ダイフォン音源には欠けがある。CASEは`zh`が全く無い)に、
+   * 無音にする代わりに使う候補。録音のある組み合わせが見つかるまで、次の順に試す。
+   * 1. 子音はそのまま、母音を近い母音に 2. 子音を近い子音に(母音は元のものから) 3. 子音も母音も近いもの
    */
-  private nearVowels(v: string): string[] {
-    return similarVowels[v] ?? [];
+  private near(list: readonly string[], table: Record<string, string[]>): string[] {
+    return list.flatMap((x) => [x, ...(table[x] ?? [])]);
   }
 
-  protected cvCandidates({ onset, v, isExt, prevV }: CvContext): CvCandidate[] {
-    if (isExt) {
-      return [v, ...this.nearVowels(v)].map((alias) => ({ alias, lead: null }));
-    }
+  /** `c v`の形の候補を、c(子音)の近さ→v(母音)の近さの順に並べる */
+  private pairs(cs: string[], vs: string[], join: (c: string, v: string) => string): string[] {
+    return cs.flatMap((c) => vs.map((v) => join(c, v)));
+  }
+
+  protected cvCandidates({ onset, v, isExt, prevV, prevCoda }: CvContext): CvCandidate[] {
+    const vowels = [v, ...(similarVowels[v] ?? [])];
+    const bare = vowels.map((x) => ({ alias: x, lead: null as string | null }));
+    if (isExt) return bare;
     if (onset.length === 0) {
-      const heads = (x: string) => (prevV === null ? `- ${x}` : `${prevV} ${x}`);
-      return [
-        ...[v, ...this.nearVowels(v)].map((x) => ({ alias: heads(x), lead: null })),
-        { alias: v, lead: null },
-      ];
+      // 直前が子音で終わっていたら、その子音から母音へ。母音から母音への繋ぎ(`ay ih`)では、
+      // 語尾の子音の後で母音がもう一度鳴ってしまう
+      const cs = prevCoda !== null ? this.near([prevCoda], similarConsonants) : [];
+      const heads =
+        prevCoda !== null
+          ? this.pairs(cs, vowels, (c, x) => `${c} ${x}`)
+          : vowels.map((x) => (prevV === null ? `- ${x}` : `${prevV} ${x}`));
+      return [...heads.map((alias) => ({ alias, lead: null })), ...bare];
     }
     const last = onset[onset.length - 1];
     const lead = prevV === null ? null : onset[0];
-    const cands: CvCandidate[] = [v, ...this.nearVowels(v)].map((x) => ({
-      alias: `${last} ${x}`,
-      lead,
-    }));
-    if (prevV === null) cands.push({ alias: v, lead: null });
-    return cands;
+    const cands = this.pairs(this.near([last], similarConsonants), vowels, (c, x) => `${c} ${x}`)
+      .map((alias) => ({ alias, lead }));
+    // 録音がどれも無いときの最後の手段。子音は落ちるが、母音は鳴らす
+    return [...cands, ...bare];
   }
 
   protected vcCandidates(prev: string, c: string): string[] {
     if (c === VOWEL_END) {
-      return [prev, ...this.nearVowels(prev)].map((x) => `${x} -`);
+      return [prev, ...(similarVowels[prev] ?? [])].map((x) => `${x} -`);
     }
-    return [prev, ...this.nearVowels(prev)].map((x) => `${x} ${c}`);
+    return this.pairs(
+      this.near([c], similarConsonants),
+      [prev, ...(similarVowels[prev] ?? [])],
+      (cc, x) => `${x} ${cc}`
+    );
   }
 }

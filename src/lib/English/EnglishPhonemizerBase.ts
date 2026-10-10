@@ -30,6 +30,11 @@ export type CvContext = {
   isExt: boolean;
   /** 直前ノートの母音。フレーズの先頭ならnull */
   prevV: string | null;
+  /**
+   * 直前ノートの語尾子音(複数なら最後の1つ)。直前の音節が子音で終わるときだけ。
+   * 母音で始まるこのノートは、母音から母音への繋ぎではなく、この子音から母音への繋ぎで始める。
+   */
+  prevCoda: string | null;
 };
 
 type NoteInfo = { lead: string | null };
@@ -146,6 +151,10 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
         v: cur.syl.v,
         isExt: cur.isExt,
         prevV: prevS ? prevS.syl.v : null,
+        prevCoda:
+          prevS && prevS.hasCoda && prevS.syl.coda.length > 0
+            ? prevS.syl.coda[prevS.syl.coda.length - 1]
+            : null,
       });
       for (const c of cands) {
         record = this.findRecord(vb, c.alias, note.notenum, color);
