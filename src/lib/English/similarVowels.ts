@@ -25,21 +25,22 @@ export const similarVowels: Record<string, string[]> = {
  * 有声・無声の対と、同じ位置で出す子音を選ぶ。
  */
 export const similarConsonants: Record<string, string[]> = {
-  zh: ["sh", "jh", "z"],
-  jh: ["ch", "zh", "d"],
-  ch: ["sh", "jh", "t"],
+  // 有声音は有声音で代用する(`zh`を無声の`sh`にすると、pleasureがpressureに聞こえる)
+  zh: ["z", "jh", "sh"],
+  jh: ["ch", "zh"],
+  ch: ["sh", "jh"],
   sh: ["s", "ch", "zh"],
-  dh: ["d", "th", "z"],
+  dh: ["z", "th", "d"],
   th: ["s", "f", "dh"],
   v: ["f", "b"],
-  f: ["v", "p"],
+  f: ["v"],
   z: ["s", "zh", "dh"],
   s: ["z", "sh"],
   ng: ["n", "g"],
   g: ["k", "d"],
   k: ["g", "t"],
   b: ["p", "v"],
-  p: ["b", "f"],
+  p: ["b"],
   d: ["t", "dh"],
   t: ["d", "k"],
 };

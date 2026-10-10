@@ -163,6 +163,12 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
         record = this.findRecord(vb, c.alias, note.notenum, color);
         if (record) {
           lead = c.lead;
+          // 子音が1つだけの頭子音は、実際に鳴らすCVの子音に合わせる。録音が無くて近い子音で代用したとき
+          // (`zh`→`z`)に、直前の末尾VCが元の子音(`sh`)へ繋ぐと、子音が食い違って聞こえるため
+          if (lead !== null && cur.syl.onset.length === 1) {
+            const played = c.alias.split(" ");
+            if (played.length === 2 && played[0] !== "-") lead = played[0];
+          }
           break;
         }
       }

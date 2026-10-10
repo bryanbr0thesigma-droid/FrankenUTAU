@@ -282,3 +282,19 @@ describe("the tail piece gets the pitch of its own time span, not the end of the
     expect(vc[0]).toBe(cv[idx]);
   });
 });
+
+describe("missing consonants: keep the vowel, use a voiced neighbour, and lead in with the consonant that plays", () => {
+  it("pleasure: zh is missing, so the second syllable uses z (voiced), not sh", () => {
+    const out = sing(["pleasure", "+", "R"]);
+    expect(out[1][0]).toBe("z er");
+    // 前の音節の末尾VCも、鳴らすzに合わせる(shに繋いでから zにしない)
+    expect(out[0][1]).toMatch(/^eh (z|s)$/);
+  });
+
+  it("habit: ae b is missing, so the tail keeps the ae vowel and uses a stop closure (ae p), not aa b", () => {
+    const out = sing(["habit", "+", "R"]);
+    expect(out[0][0]).toBe("hh ae");
+    expect(out[0][1]).toBe("ae p");
+    expect(out[1][0]).toBe("b ah");
+  });
+});

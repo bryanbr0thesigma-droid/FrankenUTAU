@@ -22,15 +22,19 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
   /**
    * 音源にその組み合わせの録音が無いとき(ダイフォン音源には欠けがある。CASEは`zh`が全く無い)に、
    * 無音にする代わりに使う候補。録音のある組み合わせが見つかるまで、次の順に試す。
-   * 1. 子音はそのまま、母音を近い母音に 2. 子音を近い子音に(母音は元のものから) 3. 子音も母音も近いもの
+   * 1. 母音はそのまま、子音を近い子音に 2. 母音を近い母音に(子音は元のものから) 3. 子音も母音も近いもの
    */
   private near(list: readonly string[], table: Record<string, string[]>): string[] {
     return list.flatMap((x) => [x, ...(table[x] ?? [])]);
   }
 
-  /** `c v`の形の候補を、c(子音)の近さ→v(母音)の近さの順に並べる */
+  /**
+   * `c v`の形の候補を、母音を変えない順に並べる(母音の近さが外側、子音の近さが内側)。
+   * 録音が無い組では、母音を変えるより子音を近い子音に変えるほうが目立たない。母音は伸ばして歌うので、
+   * 変えると前後の母音と繋がらず途切れて聞こえる(`ae b`が無いとき、`aa b`でなく`ae p`を使う)。
+   */
   private pairs(cs: string[], vs: string[], join: (c: string, v: string) => string): string[] {
-    return cs.flatMap((c) => vs.map((v) => join(c, v)));
+    return vs.flatMap((v) => cs.map((c) => join(c, v)));
   }
 
   protected cvCandidates({ onset, v, isExt, prevV, prevCoda }: CvContext): CvCandidate[] {
