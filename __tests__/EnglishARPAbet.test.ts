@@ -373,3 +373,22 @@ describe("two-consonant endings get a second tail piece (CC) when the note is lo
     expect(render("sins", 240).count).toBe(2);
   });
 });
+
+describe("tail consonants that the recordings cannot play", () => {
+  it("that's plays the s, since the t before it is only a silent closure", () => {
+    const out = sing(["that's", "R"]);
+    expect(out[0]).toEqual(["dh ae", "ae s"]);
+    // 有声の閉鎖音(sidesのd z)は、これまでどおり先頭の子音を鳴らす
+    expect(sing(["sides", "R"])[0][1]).toBe("ay d");
+  });
+  it("bit slow skips the unreleased t and goes straight to the s", () => {
+    const out = sing(["bit", "slow", "R"]);
+    expect(out[0][1]).toBe("ih s");
+    expect(out[1][0]).toBe("l ow");
+    // 次の語が子音連続でなければ、語尾の子音のまま
+    expect(sing(["bit", "low", "R"])[0][1]).toBe("ih t");
+  });
+  it("you uses the quicker take y uw3 so the vowel is reached on a short note", () => {
+    expect(sing(["you", "R"])[0][0]).toBe("y uw3");
+  });
+});

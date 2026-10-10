@@ -57,6 +57,9 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
     const lead = prevV === null ? null : onset[0];
     const cands = this.pairs(this.near([last], similarConsonants), vowels, (c, x) => `${c} ${x}`)
       .map((alias) => ({ alias, lead }));
+    // CASEの`y uw`(you)は、母音が`iy`のまま約340ms続いてから`uw`になるので、短いノートでは`yee`になる。
+    // 別テイクの`y uw3`は約150msで`uw`に移る。別テイクが無い音源では、普通の`y uw`を使う
+    if (last === "y" && v === "uw") cands.unshift({ alias: "y uw3", lead });
     // 録音がどれも無いときの最後の手段。子音は落ちるが、母音は鳴らす
     return [...cands, ...bare];
   }
