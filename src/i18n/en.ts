@@ -446,6 +446,9 @@ export const translationEn = {
     octaveDown: "Lower by 1 Octave",
     envelopeNormalize: "Envelope Normalization",
     pitchSnapBatchProcess: "Snap Pitch to Scale",
+    naturalPitchBatchProcess: {
+      title: "Natural Pitch (Glide + Vibrato)",
+    },
     limitHighNotesBatchProcess: {
       title: "Lower High Notes",
       ceiling: "Highest note (higher notes drop by octaves until they fit)",
