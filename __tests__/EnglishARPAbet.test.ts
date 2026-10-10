@@ -495,3 +495,22 @@ describe("s + consonant onsets and missing g", () => {
     expect(out[0][1]).toBe("uh d");
   });
 });
+
+describe("n before a t cluster", () => {
+  it("in + tray skips the n and goes to t, so the t is heard", () => {
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = ["in", "tray", "R"].map((l, i) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = [240, 480, 480][i]; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    const params = p.getRequestParam(vb, notes[0], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    expect(aliasOf(params[1].resamp!.inputWav, params[1].resamp!.offsetMs)).toBe("ih t");
+  });
+});

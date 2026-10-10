@@ -26,10 +26,6 @@ export type ExtraTail = {
   kind: "cluster" | "release";
 };
 
-/** 実験用の切替(聞き比べ用)。既定ではすべて無効 */
-export const knob = (name: string): boolean =>
-  !!(globalThis as { __FRANKEN?: Record<string, boolean> }).__FRANKEN?.[name];
-
 /** CVの固定部分の長さ(ms) */
 export const fixedPartMs = (note: Note): number => note.oto?.velocity ?? 0;
 

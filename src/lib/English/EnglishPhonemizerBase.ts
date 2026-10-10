@@ -10,11 +10,7 @@
  */
 import type OtoRecord from "utauoto/dist/OtoRecord";
 import type { ConsonantParam, ExtraTail } from "../Phonemizer/JPAutoPhonemizer";
-import {
-  JPAutoPhonemizer,
-  fixedPartMs,
-  knob,
-} from "../Phonemizer/JPAutoPhonemizer";
+import { JPAutoPhonemizer, fixedPartMs } from "../Phonemizer/JPAutoPhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
 import {
@@ -264,14 +260,13 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
         // 次のノートの`ch ih`(hatch it)に破擦音を任せる
         consonant = coda[0] === "ch" ? "t" : "d";
       } else if (
-        knob("nSkip") &&
         coda.length === 1 &&
         coda[0] === "n" &&
         nextIsSyllable &&
         (this.syllableOf(next)?.syl.onset.length ?? 0) >= 2 &&
         ["t", "d"].includes(this.info.get(next)?.lead ?? "")
       ) {
-        // 実験用: `in`+`trest`は、`n`を省いて`t`へ繋ぐ(鼻音と`t`は同じ位置で作る音)
+        // `in`+`trest`は、`n`を省いて`t`へ繋ぐ(鼻音と`t`は同じ位置で作る音)
         consonant = this.info.get(next)!.lead;
       } else if (coda.length === 1 && stops.has(coda[0]) && nextIsSyllable) {
         // 次が`s`+子音で始まるとき(`bit slow`)は、聞こえない語尾の閉鎖音を省いて、語頭の`s`へ繋ぐ
