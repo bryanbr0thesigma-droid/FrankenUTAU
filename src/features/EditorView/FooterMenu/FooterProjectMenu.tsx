@@ -181,17 +181,14 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           })
         );
       }
-      // ARPAbet音源で英語を歌わせるときは、短いノートの子音速度を上げて聞き取りやすくする。
-      // 歌詞を変換したノートの音源設定が必要なので、先に適用し直す
+      // ARPAbet音源で英語を歌わせるときは、短いノートの子音速度を上げて聞き取りやすくする
       if (
         vb !== null &&
         useMusicProjectStore.getState().phonemizer instanceof
-          EnglishARPAbetPhonemizer
+          EnglishARPAbetPhonemizer &&
+        speedUpShortNotes(ust.notes) > 0
       ) {
         ust.notes.forEach((n) => n.applyOto(vb));
-        if (speedUpShortNotes(ust.notes) > 0) {
-          ust.notes.forEach((n) => n.applyOto(vb));
-        }
       }
       if (notices.length > 0) {
         snackBarStore.setSeverity("info");
