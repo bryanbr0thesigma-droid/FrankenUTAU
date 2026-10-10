@@ -542,3 +542,29 @@ describe("rules stay narrow: only the contexts that were listened to", () => {
     expect(first(["but", "I", "R"], [480, 480, 480]).length).toBe(2);
   });
 });
+
+describe("banks whose end pieces have a long run-up (VLGR v2)", () => {
+  it("never makes the opening CV piece shorter than 30ms, and the pieces still sum to the note", () => {
+    const rec2 = new Map(records);
+    // 母音部分を含む長いプリウタランスの末尾VC(VLGR v2のaa sh: pre166 / overlap36)
+    rec2.set("aa sh", { ...records.get("aa sh"), pre: 166, overlap: 36 });
+    const vb2 = { getOtoRecord: (a: string) => rec2.get(a) ?? null } as any;
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = ["washes", "+", "R"].map((l, i) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = i === 2 ? 960 : 240; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb2));
+    const params = p.getRequestParam(vb2, notes[0], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    const lens = params.map((q) => (q.append as any).length);
+    expect(lens[0]).toBeGreaterThanOrEqual(30);
+    const [cv, vc] = params.map((q) => q.append as any);
+    expect(cv.length + (vc.length - vc.overlap)).toBeCloseTo(notes[0].outputMs, 6);
+  });
+});

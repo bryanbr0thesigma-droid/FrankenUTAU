@@ -13,6 +13,13 @@ const MIN_EXTRA_TAIL_MS = 30;
 /** 閉鎖音の解放ピースを続けるときの、VC側の閉鎖の長さと、解放の長さ(ms) */
 /** 子音連続のピースを付けるノートの最小の長さ(ms)。聞き比べで、400msでは明瞭、200msでは母音が足りなかった */
 const MIN_CC_NOTE_MS = 280;
+/**
+ * 末尾VCを付けたあとに、ノート頭のCVに最低限残す長さ(ms)。末尾VCのプリウタランスが長い音源
+ * (母音部分を持つVLGR v2など)で、短いノートのCVの長さが負になり、実際の音声が予定より長くなるのを防ぐ
+ */
+const MIN_CV_MS = 30;
+/** 末尾VCの長さ(ms)がこれ未満(負)になるなら、末尾VCは付けない */
+const MIN_TAIL_FIT_MS = 0;
 /** 閉鎖音の解放ピースの音量(%)。100%だと破裂音が目立ちすぎる。聞き比べで50%と25%がどちらも良かった */
 const RELEASE_VOLUME_PERCENT = 40;
 const RELEASE_CLOSURE_MS = 20;
@@ -520,6 +527,14 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     }
     return null;
   }
+  /**
+   * 末尾VCの長さの上限。VCの全体の長さ(T + プリウタランス)からオーバーラップを引いた分だけ、
+   * ノート頭のCVが短くなるので、CVにMIN_CV_MSが残る長さまでにする
+   */
+  private maxTailByCv(note: Note, vcOtoRecord: OtoRecord): number {
+    return note.outputMs - MIN_CV_MS - (vcOtoRecord.pre - vcOtoRecord.overlap);
+  }
+
   protected _getNotesCount(vb: BaseVoiceBank, note: Note): number {
     /**
      * 次のノートの子音を確認し、nullが返ってきた場合はparamsは1つ。
@@ -538,8 +553,15 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     if (vcOtoRecord === null) return 1;
     // 末尾にCCも続けるピースの数。実際に使うときだけ数える
     if (nextConsonant && note.oto) {
-      const target = this.getVCTargetLength(note, vcOtoRecord, nextConsonant);
-      const availableMs = note.targetLength - fixedPartMs(note);
+      const maxByCv = this.maxTailByCv(note, vcOtoRecord);
+      const target = Math.min(
+        this.getVCTargetLength(note, vcOtoRecord, nextConsonant),
+        maxByCv,
+      );
+      const availableMs = Math.min(
+        note.targetLength - fixedPartMs(note),
+        maxByCv,
+      );
       if (
         this.planExtraTail(vb, note, nextConsonant, target, availableMs) !==
         null
@@ -628,12 +650,15 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     const cvPitch = note.getRenderPitch();
     /** vcOtoRecordが非nullかつ、追加するVCの長さがノート全体の長さから固定範囲を除いたものより小さいならばparamsを追加し先に2つ目のparamsを設定する */
     if (vcOtoRecord !== null) {
-      const baseTargetLength = this.getVCTargetLength(
-        note,
-        vcOtoRecord,
-        nextConsonant,
+      const maxByCv = this.maxTailByCv(note, vcOtoRecord);
+      const baseTargetLength = Math.min(
+        this.getVCTargetLength(note, vcOtoRecord, nextConsonant),
+        maxByCv,
       );
-      const availableMs = note.targetLength - fixedPartMs(note);
+      const availableMs = Math.min(
+        note.targetLength - fixedPartMs(note),
+        maxByCv,
+      );
       /**
        * 末尾VCの後ろにもう1つピース(子音連続のCCや、閉鎖音の解放)を続けるときは、VCのプリウタランス位置から
        * 数えた残り長さTを、T = T1(VC) + T2(後ろのピース) + (後ろのピースのpre - overlap)に分ける。
@@ -651,7 +676,10 @@ export class JPAutoPhonemizer extends BasePhonemizer {
         vcOtoRecord,
         vcTargetNoteLength,
       );
-      if (vcTargetNoteLength <= availableMs) {
+      if (
+        vcTargetNoteLength <= availableMs &&
+        vcTargetNoteLength >= MIN_TAIL_FIT_MS
+      ) {
         params.push({ resamp: undefined, append: undefined });
         const useCc = cc !== null;
         const ccRecord = cc?.record;
