@@ -23,13 +23,16 @@ export class NaturalPitchBatchProcess extends BaseBatchProcess<void> {
   summary = "pitch:ポルタメントとビブラートでピッチを自然にする";
 
   protected _process(notes: Note[]): Note[] {
+    // 実験用: 聞き比べのため、片方だけ適用する
+    const mode = (globalThis as { __FRANKEN?: { naturalMode?: string } })
+      .__FRANKEN?.naturalMode;
     const newNotes = notes.map((n) => n.deepCopy());
     newNotes.forEach((n, i) => {
       if (n.lyric === "R") return;
       const hasPitch =
         (n.pbw !== undefined && n.pbw.length > 0) ||
         (n.pby !== undefined && n.pby.length > 0);
-      if (!hasPitch) {
+      if (!hasPitch && mode !== "vibrato") {
         const prev = newNotes[i - 1];
         // 前のノートが歌と続いているときだけ、前の音高から移る
         if (prev !== undefined && prev.lyric !== "R") {
@@ -39,7 +42,11 @@ export class NaturalPitchBatchProcess extends BaseBatchProcess<void> {
           n.setPbm([""]);
         }
       }
-      if (n.vibrato === undefined && n.msLength >= VIBRATO_MIN_MS) {
+      if (
+        mode !== "glide" &&
+        n.vibrato === undefined &&
+        n.msLength >= VIBRATO_MIN_MS
+      ) {
         n.vibrato = VIBRATO;
       }
     });
