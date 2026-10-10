@@ -13,6 +13,7 @@ import {
 } from "../English/EnglishPhonemizerBase";
 import type { PhonemeScheme } from "../English/EnglishG2p";
 import { similarConsonants, similarVowels } from "../English/similarVowels";
+import { knob } from "./JPAutoPhonemizer";
 
 export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
   name = "phonemizer.EnglishARPAbetPhonemizer";
@@ -24,7 +25,10 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
    * 無音にする代わりに使う候補。録音のある組み合わせが見つかるまで、次の順に試す。
    * 1. 母音はそのまま、子音を近い子音に 2. 母音を近い母音に(子音は元のものから) 3. 子音も母音も近いもの
    */
-  private near(list: readonly string[], table: Record<string, string[]>): string[] {
+  private near(
+    list: readonly string[],
+    table: Record<string, string[]>,
+  ): string[] {
     return list.flatMap((x) => [x, ...(table[x] ?? [])]);
   }
 
@@ -33,11 +37,21 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
    * 録音が無い組では、母音を変えるより子音を近い子音に変えるほうが目立たない。母音は伸ばして歌うので、
    * 変えると前後の母音と繋がらず途切れて聞こえる(`ae b`が無いとき、`aa b`でなく`ae p`を使う)。
    */
-  private pairs(cs: string[], vs: string[], join: (c: string, v: string) => string): string[] {
+  private pairs(
+    cs: string[],
+    vs: string[],
+    join: (c: string, v: string) => string,
+  ): string[] {
     return vs.flatMap((v) => cs.map((c) => join(c, v)));
   }
 
-  protected cvCandidates({ onset, v, isExt, prevV, prevCoda }: CvContext): CvCandidate[] {
+  protected cvCandidates({
+    onset,
+    v,
+    isExt,
+    prevV,
+    prevCoda,
+  }: CvContext): CvCandidate[] {
     const vowels = [v, ...(similarVowels[v] ?? [])];
     const bare = vowels.map((x) => ({ alias: x, lead: null as string | null }));
     if (isExt) return bare;
@@ -55,8 +69,11 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
     }
     const last = onset[onset.length - 1];
     const lead = prevV === null ? null : onset[0];
-    const cands = this.pairs(this.near([last], similarConsonants), vowels, (c, x) => `${c} ${x}`)
-      .map((alias) => ({ alias, lead }));
+    const cands = this.pairs(
+      this.near([last], similarConsonants),
+      vowels,
+      (c, x) => `${c} ${x}`,
+    ).map((alias) => ({ alias, lead }));
     // CASEの`y uw`(you)は、母音が`iy`のまま約340ms続いてから`uw`になるので、短いノートでは`yee`になる。
     // 別テイクの`y uw3`は約150msで`uw`に移る。別テイクが無い音源では、普通の`y uw`を使う
     if (last === "y" && v === "uw") cands.unshift({ alias: "y uw3", lead });
@@ -68,10 +85,20 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
     if (c === VOWEL_END) {
       return [prev, ...(similarVowels[prev] ?? [])].map((x) => `${x} -`);
     }
+    // 実験用: gDは`g`が無いとき`d`を先に、noSubは近い子音で代用せず末尾VCを付けない
+    const table = knob("gD")
+      ? { ...similarConsonants, g: ["d", "k"] }
+      : similarConsonants;
+    if (knob("noSub"))
+      return this.pairs(
+        [c],
+        [prev, ...(similarVowels[prev] ?? [])],
+        (cc, x) => `${x} ${cc}`,
+      );
     return this.pairs(
-      this.near([c], similarConsonants),
+      this.near([c], table),
       [prev, ...(similarVowels[prev] ?? [])],
-      (cc, x) => `${x} ${cc}`
+      (cc, x) => `${x} ${cc}`,
     );
   }
 }

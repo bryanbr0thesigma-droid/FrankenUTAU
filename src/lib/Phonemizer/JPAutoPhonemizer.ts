@@ -15,6 +15,8 @@ const MIN_EXTRA_TAIL_MS = 30;
 const MIN_CC_NOTE_MS = 280;
 /** 閉鎖音の解放ピースの音量(%)。100%だと破裂音が目立ちすぎる。聞き比べで50%と25%がどちらも良かった */
 const RELEASE_VOLUME_PERCENT = 40;
+/** 次の語頭の子音連続へ繋ぐピースを続けるとき、語尾の子音のVCに残す長さ(ms) */
+const LEAD_VC_MS = 25;
 const RELEASE_CLOSURE_MS = 20;
 const RELEASE_MS = 60;
 
@@ -23,8 +25,12 @@ const RELEASE_MS = 60;
  */
 export type ExtraTail = {
   record: OtoRecord;
-  kind: "cluster" | "release";
+  kind: "cluster" | "release" | "lead";
 };
+
+/** 実験用の切替(聞き比べ用)。既定ではすべて無効 */
+export const knob = (name: string): boolean =>
+  !!(globalThis as { __FRANKEN?: Record<string, boolean> }).__FRANKEN?.[name];
 
 /** CVの固定部分の長さ(ms) */
 export const fixedPartMs = (note: Note): number => note.oto?.velocity ?? 0;
@@ -590,9 +596,15 @@ export class JPAutoPhonemizer extends BasePhonemizer {
       Math.max(target, note.msLength * (isRelease ? 0.5 : 0.4)),
     );
     const budget = total - net;
-    const t1 = isRelease ? RELEASE_CLOSURE_MS : Math.floor(budget / 2);
+    const t1 = isRelease
+      ? RELEASE_CLOSURE_MS
+      : kind === "lead"
+        ? LEAD_VC_MS
+        : Math.floor(budget / 2);
     const t2 = budget - t1;
-    return t1 >= (isRelease ? 0 : MIN_EXTRA_TAIL_MS) && t2 >= MIN_EXTRA_TAIL_MS
+    return t1 >=
+      (isRelease ? 0 : kind === "lead" ? LEAD_VC_MS : MIN_EXTRA_TAIL_MS) &&
+      t2 >= MIN_EXTRA_TAIL_MS
       ? { record, t1, t2, target: total, kind }
       : null;
   }
