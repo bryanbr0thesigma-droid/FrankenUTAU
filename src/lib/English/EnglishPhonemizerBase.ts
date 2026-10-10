@@ -209,7 +209,10 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       consonant = cur.syl.coda[0];
       ending = !nextIsSyllable;
     } else if (nextIsSyllable) {
-      consonant = this.info.get(next)?.lead ?? null;
+      // 実験用: 次の頭子音へ繋ぐ末尾VC(語尾の子音ではないもの)を使わない
+      consonant = (globalThis as { __FRANKEN_NO_LEAD_TAIL?: boolean }).__FRANKEN_NO_LEAD_TAIL
+        ? null
+        : this.info.get(next)?.lead ?? null;
     } else if (this.closesVowels && cur.atWordEnd && next.lyric === "R") {
       return {
         consonant: VOWEL_END,
@@ -265,6 +268,11 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     const fitted = full > available && available >= MIN_TAIL_MS ? available : full;
     // 末尾VCがノートの大半を占めると母音に時間が残らず、早い曲で聞き取れなくなる。
     // ノート長のTAIL_FRACTION(35%)を上限にする(聞き比べで、無制限・50%より明瞭だった)
-    return Math.min(fitted, Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION));
+    const capped = Math.min(fitted, Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION));
+    // 実験用: 鼻音・流音・摩擦音の末尾VCの下限(ms)
+    const minCont = (globalThis as { __FRANKEN_MIN_CONT_TAIL?: number }).__FRANKEN_MIN_CONT_TAIL;
+    return consonantParam.type === "preutter" && typeof minCont === "number"
+      ? Math.min(Math.max(capped, minCont), Math.max(available, MIN_TAIL_MS))
+      : capped;
   }
 }
