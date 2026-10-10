@@ -17,7 +17,13 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useMenu } from "../../../hooks/useMenu";
 import { LOG } from "../../../lib/Logging";
+import { convertHanziNotes } from "../../../lib/Chinese/hanziToPinyin";
+import { speedUpShortNotes } from "../../../lib/English/fastNoteVelocity";
+import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
+import { normalizeJapaneseNotes } from "../../../lib/Japanese/normalizeKana";
+import { applyGlide } from "../../../lib/BatchProcess/NaturalPitchBatchProcess";
 import { dumpNotes } from "../../../lib/Note";
+import { EnglishARPAbetPhonemizer } from "../../../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { undoManager } from "../../../lib/UndoManager";
 import { Ust } from "../../../lib/Ust";
 import { dumpUstx } from "../../../lib/Ustx";
@@ -86,7 +92,8 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
       LOG.info(`ustの読込開始`, "FooterMenu");
       const ust = new Ust();
       const buf = await file.arrayBuffer();
-      if (file.name.toLowerCase().endsWith(".ustx")) {
+      const isUstx = file.name.toLowerCase().endsWith(".ustx");
+      if (isUstx) {
         await ust.loadUstx(buf);
       } else {
         await ust.load(buf);
@@ -105,6 +112,92 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
           `vbがロードされていません。テスト以外では必ず事前にロードされるはずなので何かがおかしい`,
           "FooterProjectMenu"
         );
+      }
+      const has = (a: string) => vb !== null && !!vb.getOtoRecord(a, 60, "");
+      /** 読込時に歌詞を整えた内容のお知らせ。まとめて1つ表示する */
+      const notices: string[] = [];
+      // 漢字(中国語)の歌詞は、音源のピンイン表記に変換する
+      const hanzi = vb !== null ? await convertHanziNotes(ust.notes, has) : null;
+      if (hanzi !== null) {
+        LOG.info(
+          `漢字をピンインに変換。${JSON.stringify({
+            converted: hanzi.converted,
+            missing: hanzi.missing,
+          })}`,
+          "FooterProjectMenu"
+        );
+        notices.push(
+          t("editor.footer.ustHanziConverted", {
+            converted: hanzi.converted,
+            missing: hanzi.missing,
+          })
+        );
+      }
+      // VCCV音源向けのustをARPAbetのCVVC音源で歌わせる場合は、歌詞を音源のエイリアスに変換する
+      const converted =
+        vb !== null &&
+        useMusicProjectStore.getState().phonemizer instanceof
+          EnglishARPAbetPhonemizer
+          ? convertVccvNotes(ust.notes, has)
+          : null;
+      if (converted !== null) {
+        ust.notes = converted.notes;
+        LOG.info(
+          `VCCVのustをARPAbetの音源向けに変換。${JSON.stringify({
+            converted: converted.converted,
+            merged: converted.merged,
+            rests: converted.rests,
+            approximated: converted.approximated,
+          })}`,
+          "FooterProjectMenu"
+        );
+        notices.push(
+          t("editor.footer.ustVccvConverted", {
+            converted: converted.converted,
+            merged: converted.merged,
+            rests: converted.rests,
+            approximated: converted.approximated,
+          })
+        );
+      }
+      // かなの歌詞のustは、`+`の伸ばしや音源に無い外来音のかなを整える
+      const japanese =
+        converted === null && vb !== null
+          ? normalizeJapaneseNotes(ust.notes, has)
+          : null;
+      if (japanese !== null) {
+        ust.notes = japanese.notes;
+        LOG.info(
+          `かなの歌詞を整えた。${JSON.stringify({
+            merged: japanese.merged,
+            remapped: japanese.remapped,
+            rests: japanese.rests,
+          })}`,
+          "FooterProjectMenu"
+        );
+        notices.push(
+          t("editor.footer.ustJapaneseNormalized", {
+            merged: japanese.merged,
+            remapped: japanese.remapped,
+            rests: japanese.rests,
+          })
+        );
+      }
+      // ustxのピッチは階段状でロボットのように聞こえるので、音が変わるところをなめらかにつなぐ
+      if (isUstx) applyGlide(ust.notes);
+      // ARPAbet音源で英語を歌わせるときは、短いノートの子音速度を上げて聞き取りやすくする
+      if (
+        vb !== null &&
+        useMusicProjectStore.getState().phonemizer instanceof
+          EnglishARPAbetPhonemizer &&
+        speedUpShortNotes(ust.notes) > 0
+      ) {
+        ust.notes.forEach((n) => n.applyOto(vb));
+      }
+      if (notices.length > 0) {
+        snackBarStore.setSeverity("info");
+        snackBarStore.setValue(notices.join(" "));
+        snackBarStore.setOpen(true);
       }
       setNotes(ust.notes);
       setUstLoadProgress(false);

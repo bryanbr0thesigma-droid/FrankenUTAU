@@ -21,14 +21,33 @@ UTAlet's in-browser engine and adds OpenUtau compatibility on top.
   (`__tests__/fixtures/case-oto.txt`, alias names and timings only): about 1.6% of syllables in a
   sample of 3,000 dictionary words had no matching CV alias. Phrase-initial `- C` and `C C`
   pieces are not used.
-- **English VCCV / VCV voicebanks** (phonemizer "(English) VCCV / VCV"): a port of the alias
+- **English VCCV / VCV voicebanks** (phonemizer "(English) VCCV / VCV", selected automatically when a
+  CZ-SAMPA-style bank with aliases like `@ t`, `I t`, `-ba` is loaded; otherwise pick it in the
+  Phonemizer menu): a port of the alias
   conventions of OpenUtau's *English VCCV Phonemizer* (`-ba`, `ba`, `a b`, `at-`, `aa`; CZ-SAMPA
   symbols), using CMUdict (`public/dict/cmudict-en.txt`, loaded on first use, then cached offline).
   Type a word on its first note and `+` on the notes for further syllables, e.g. `hello` `+`.
-  Use `[hh ah l ow]` to give ARPAbet pronunciations, and `!alias` to force an exact alias.
+  Use `[hh ah l ow]` (or just `hh ah l ow`, three or more tokens) to give ARPAbet pronunciations, and
+  `!alias` to force an exact alias. Punctuation around a word (`hello,`) is ignored.
   Differences from OpenUtau: one CV plus one trailing VC per note (consonant clusters are
   simplified to the first and last consonant), no ConVel, no YAML dictionary/replacement files,
   and unknown words use a crude spelling-based guess instead of OpenUtau's neural G2P.
+- **VCCV-style `.ust` on an ARPAbet CVVC bank**: a UST sequenced one piece per note for an English VCCV bank
+  (`-dhA`, `A s`, `sA`, `_ra`, `em-`) is converted when imported while the ARPAbet phonemizer is active:
+  CV/VC pieces become the bank's names (`dh ey`, `ey s`), vowel-only pieces are merged into the previous note,
+  and pieces the bank has no sound for (consonant clusters, `w`/`y` glide endings) become rests. Timing values
+  saved for the other bank are dropped. Tested against Cyn English; symbols follow OpenUtau's VCCV table plus
+  `&`=ae, `0`=er, `1`=ih, `x`=ah. Plain English-word USTs are never touched.
+- **Japanese (kana) songs**: on import, OpenUtau's `+` hold is merged into the previous note and kana the voicebank
+  lacks (`を`, `うぃ`, `てぃ`, `ふぁ`...) are swapped for the closest romaji or kana alias it has. `っ` stays a short silence.
+  Only one track of a multi-track `.ustx` is imported: the one named `main` or `lead`, otherwise the first.
+- **Chinese lyrics** (one hanzi per note) are converted on import to the bank's toneless pinyin aliases (`!hua`, `!ya`), reading
+  multi-character words in context (`悲痛` = bei tong, `境地` = jing di) via `pinyin-pro`, which is loaded only when a song contains
+  Chinese. `ao`/`er` use `ao_zh`/`er_zh` when the bank has them.
+- **Sparse diphone banks**: when an English CV/VC sound is missing from the bank (e.g. CASE has no `s aw`, `f uh`, `v aa`), the
+  English ARPAbet phonemizer now uses the nearest vowel instead of going silent. Curly apostrophes (`I’d`) are read like straight ones.
+- **Lower High Notes** (Batch Process menu): drops every note above a chosen ceiling (F4 to G5, default D5) by whole
+  octaves until it fits. Note names stay the same and per-note pitch curves are untouched; rests are ignored. Undoable.
 - Save as `.ust` or `.ustx` (opens in OpenUtau).
 - Not carried over from `.ustx`: OpenUtau expressions, phonemizer overrides, extra tracks, curves.
 

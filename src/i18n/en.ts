@@ -347,6 +347,12 @@ export const translationEn = {
       playStop: "Stop",
       wav: "Save WAV",
       ustLoadError: "Failed to load the UST file. Please check the file.",
+      ustVccvConverted:
+        "This UST was written for a VCCV voicebank. Converted {{converted}} lyrics to this voicebank's ARPAbet names ({{approximated}} of them use a similar vowel because the voicebank lacks that recording), merged {{merged}} held vowels and silenced {{rests}} pieces it has no sound for (consonant clusters, etc.).",
+      ustJapaneseNormalized:
+        "Merged {{merged}} \"+\" holds into the previous note ({{rests}} had nothing to extend and became rests) and replaced {{remapped}} kana this voicebank lacks with the closest available sound.",
+      ustHanziConverted:
+        "Converted {{converted}} Chinese characters to pinyin ({{missing}} had no matching sound in this voicebank).",
       verticalZoomIn: "Zoom In (Vertical)",
       verticalZoomOut: "Zoom Out (Vertical)",
       horizontalZoomIn: "Zoom In (Horizontal)",
@@ -440,6 +446,14 @@ export const translationEn = {
     octaveDown: "Lower by 1 Octave",
     envelopeNormalize: "Envelope Normalization",
     pitchSnapBatchProcess: "Snap Pitch to Scale",
+    naturalPitchBatchProcess: {
+      title: "Smooth Pitch (Glide Between Notes)",
+    },
+    limitHighNotesBatchProcess: {
+      title: "Lower High Notes",
+      ceiling: "Highest note (higher notes drop by octaves until they fit)",
+      ceilingOptions: ["F4", "G4", "A4", "B4", "C5", "D5", "E5", "G5"],
+    },
     applyOtoBatchProcess: {
       title: "Apply Oto Settings",
     },
