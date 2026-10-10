@@ -3,7 +3,7 @@ import { defaultNote } from "../../config/note";
 import { defaultParam } from "../../types/note";
 import { AppendRequestBase, ResampRequest } from "../../types/request";
 import { noteNumToTone } from "../../utils/Notenum";
-import { encodePitch } from "../../utils/pitch";
+import { encodePitch, pitchFromIndex } from "../../utils/pitch";
 import { BasePhonemizer } from "../BasePhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
@@ -568,7 +568,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
             1000 /
             note.pitchSpan
         );
-        const vcPitch = cvPitch.slice(vcPitchStartIndex);
+        const vcPitch = pitchFromIndex(cvPitch, vcPitchStartIndex);
         params[1]["resamp"] = {
           inputWav:
             vcOtoRecord.dirpath !== ""

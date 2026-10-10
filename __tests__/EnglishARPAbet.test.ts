@@ -240,3 +240,36 @@ describe("tail length cap (35% of the note)", () => {
     expect(tail).toBeGreaterThan(60);
   });
 });
+
+describe("the tail piece gets the pitch of its own time span, not the end of the note", () => {
+  it("pads with the first pitch value when the tail starts before the pitch curve", async () => {
+    const { decodePitch, pitchFromIndex } = await import("../src/utils/pitch");
+    expect(pitchFromIndex([5, 6, 7, 8], 1)).toEqual([6, 7, 8]);
+    // 以前は`slice(-2)`になり、[7, 8]だけが返っていた
+    expect(pitchFromIndex([5, 6, 7, 8], -2)).toEqual([5, 5, 5, 6, 7, 8]);
+    expect(pitchFromIndex([], -2)).toEqual([0, 0]);
+
+    // 実際のノート: 前のノートと音高が違う短いノートの末尾VC
+    const p = new EnglishARPAbetPhonemizer();
+    const mk = (lyric: string, notenum: number) => {
+      const n = new Note();
+      n.lyric = lyric; n.tempo = 150; n.notenum = notenum; n.length = 240; n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk("I", 72), mk("cat", 60), mk("R", 60)];
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    const params = p.getRequestParam(vb, notes[1], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+    expect(params.length).toBe(2);
+    const cv = decodePitch(params[0].resamp!.pitches as string);
+    const vc = decodePitch(params[1].resamp!.pitches as string);
+    // 前のノートより低い音への移り変わりがあるので、先頭はノート本来の音高から離れている
+    expect(Math.abs(cv[0])).toBeGreaterThan(Math.abs(cv[cv.length - 1]));
+    // VCの先頭は、ノート終わりの音高ではなく、ピッチ列の先頭の値から始まる
+    expect(vc[0]).toBe(cv[0]);
+  });
+});
