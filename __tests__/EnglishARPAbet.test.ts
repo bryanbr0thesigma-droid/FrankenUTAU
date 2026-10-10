@@ -433,3 +433,35 @@ describe("release piece only on notes long enough", () => {
     expect(count("up", 240).length).toBe(2);
   });
 });
+
+describe("stops and affricates before another word", () => {
+  const pieces = (lyrics: string[], lens: number[]) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = lyrics.map((l, i) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = lens[i]; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    return notes.map((n) =>
+      p
+        .getRequestParam(vb, n, "", {
+          velocity: 100, intensity: 100, modulation: 0,
+          envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+        })
+        .map((q, i) => (i === 0 ? n.atAlias : aliasOf(q.resamp!.inputWav, q.resamp!.offsetMs)))
+    );
+  };
+  it("sip before please gets the quiet p release on a long note", () => {
+    expect(pieces(["sip", "please", "R"], [480, 480, 480])[0]).toEqual(["s ih", "ih p", "p -"]);
+  });
+  it("hatch before a vowel ends on t, and it starts with ch", () => {
+    const out = pieces(["hatch", "it", "R"], [240, 240, 480]);
+    expect(out[0]).toEqual(["hh ae", "ae t"]);
+    expect(out[1][0]).toBe("ch ih");
+    // 休符の前や子音の前は、これまでどおり`sh`で終える
+    expect(pieces(["hatch", "R"], [240, 480])[0][1]).toBe("ae sh");
+  });
+});

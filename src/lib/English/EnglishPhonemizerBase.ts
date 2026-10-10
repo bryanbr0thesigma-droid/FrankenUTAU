@@ -10,11 +10,7 @@
  */
 import type OtoRecord from "utauoto/dist/OtoRecord";
 import type { ConsonantParam, ExtraTail } from "../Phonemizer/JPAutoPhonemizer";
-import {
-  JPAutoPhonemizer,
-  fixedPartMs,
-  knob,
-} from "../Phonemizer/JPAutoPhonemizer";
+import { JPAutoPhonemizer, fixedPartMs } from "../Phonemizer/JPAutoPhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
 import {
@@ -255,13 +251,12 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       if (coda.length >= 2 && voicelessStops.has(coda[0]) && coda[1] === "s") {
         consonant = coda[1];
       } else if (
-        knob("chT") &&
         coda.length === 1 &&
         (coda[0] === "ch" || coda[0] === "jh") &&
         nextIsSyllable &&
         (this.syllableOf(next)?.syl.onset.length ?? 1) === 0
       ) {
-        // 実験用: 音源に`ae ch`が無く`ae sh`(hash)になる。次が母音で始まるなら、閉鎖の`ae t`で終えて、
+        // 音源に`ae ch`が無く`ae sh`(hash)になる。次が母音で始まるなら、閉鎖の`ae t`で終えて、
         // 次のノートの`ch ih`(hatch it)に破擦音を任せる
         consonant = coda[0] === "ch" ? "t" : "d";
       } else if (coda.length === 1 && stops.has(coda[0]) && nextIsSyllable) {
@@ -337,7 +332,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       this.findRecord(vb, alias, note.notenum, color);
     const ending = nextConsonant.consonant.endsWith("-");
     const tailed = nextConsonant.consonant.replace(/-$/, "") === coda[0];
-    if (coda.length >= 2 && tailed && (ending || knob("ccNonEnding"))) {
+    if (coda.length >= 2 && tailed && ending) {
       const record = find(`${coda[0]} ${coda[1]}`);
       return record ? { record, kind: "cluster" } : null;
     }
@@ -345,21 +340,10 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       coda.length === 1 &&
       stops.has(coda[0]) &&
       tailed &&
-      ((ending && note.msLength >= MIN_RELEASE_NOTE_MS) ||
-        (knob("releaseMid") && !ending))
+      note.msLength >= MIN_RELEASE_NOTE_MS
     ) {
       const record = find(`${coda[0]} -`);
       return record ? { record, kind: "release" } : null;
-    }
-    // 語尾の子音の後に、子音連続で始まる語(`bit`+`slow`)が続くとき、末尾VCは語尾の子音で埋まって、
-    // 語頭の子音(`s`)を鳴らす場所が無く、`low`と聞こえる。語尾の子音からその子音への繋ぎ(`t s`)を足す
-    if (knob("lead") && coda.length === 1 && !ending && tailed && note.next) {
-      const next = this.syllableOf(note.next);
-      const lead = this.info.get(note.next)?.lead;
-      if (next && next.syl.onset.length >= 2 && lead) {
-        const record = find(`${coda[0]} ${lead}`);
-        return record ? { record, kind: "lead" } : null;
-      }
     }
     return null;
   }

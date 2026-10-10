@@ -13,37 +13,21 @@ const MIN_EXTRA_TAIL_MS = 30;
 /** 閉鎖音の解放ピースを続けるときの、VC側の閉鎖の長さと、解放の長さ(ms) */
 /** 子音連続のピースを付けるノートの最小の長さ(ms)。聞き比べで、400msでは明瞭、200msでは母音が足りなかった */
 const MIN_CC_NOTE_MS = 280;
-/** 次の語頭の子音連続へ繋ぐピースを続けるとき、語尾の子音のVCに残す長さ(ms) */
-const LEAD_VC_MS = 25;
 /** 閉鎖音の解放ピースの音量(%)。100%だと破裂音が目立ちすぎる。聞き比べで50%と25%がどちらも良かった */
 const RELEASE_VOLUME_PERCENT = 40;
 const RELEASE_CLOSURE_MS = 20;
 const RELEASE_MS = 60;
 
 /**
- * 末尾VCの後ろに続けるピース。kindは、語尾の子音連続(`n z`)、閉鎖音の解放(`k -`)、
- * 次のノートの子音連続の頭の子音への繋ぎ(`t s`)
+ * 末尾VCの後ろに続けるピース。kindは、語尾の子音連続(`n z`)か、閉鎖音の解放(`k -`)
  */
 export type ExtraTail = {
   record: OtoRecord;
-  kind: "cluster" | "release" | "lead";
+  kind: "cluster" | "release";
 };
 
-/** 実験用の切替(聞き比べ用)。既定ではすべて無効 */
-export const knob = (name: string): boolean =>
-  !!(globalThis as { __FRANKEN?: Record<string, boolean> }).__FRANKEN?.[name];
-
-/** 実験用の数値の切替。無ければundefined */
-export const knobNum = (name: string): number | undefined => {
-  const v = (globalThis as { __FRANKEN?: Record<string, unknown> }).__FRANKEN?.[
-    name
-  ];
-  return typeof v === "number" ? v : undefined;
-};
-
-/** CVの固定部分の長さ(ms)。実験用に、子音速度で縮む分を反映する */
-export const fixedPartMs = (note: Note): number =>
-  (note.oto?.velocity ?? 0) * (knob("fixed") ? note.velocityRate : 1);
+/** CVの固定部分の長さ(ms) */
+export const fixedPartMs = (note: Note): number => note.oto?.velocity ?? 0;
 
 const reg = /^([^ぁ-んァ-ヶ]*)([ぁ-んァ-ヶ]+)([^ ]*)$/;
 const VCVCheck = /[-aiuron] ([ぁ-んァ-ヶ]+)/;
@@ -606,15 +590,9 @@ export class JPAutoPhonemizer extends BasePhonemizer {
       Math.max(target, note.msLength * (isRelease ? 0.5 : 0.4)),
     );
     const budget = total - net;
-    const t1 = isRelease
-      ? RELEASE_CLOSURE_MS
-      : kind === "lead"
-        ? LEAD_VC_MS
-        : Math.floor(budget / 2);
+    const t1 = isRelease ? RELEASE_CLOSURE_MS : Math.floor(budget / 2);
     const t2 = budget - t1;
-    return t1 >=
-      (isRelease ? 0 : kind === "lead" ? LEAD_VC_MS : MIN_EXTRA_TAIL_MS) &&
-      t2 >= MIN_EXTRA_TAIL_MS
+    return t1 >= (isRelease ? 0 : MIN_EXTRA_TAIL_MS) && t2 >= MIN_EXTRA_TAIL_MS
       ? { record, t1, t2, target: total, kind }
       : null;
   }
@@ -770,9 +748,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
               cutoffMs: ccRecord.blank,
               intensity:
                 params[1]["resamp"].intensity *
-                (cc.kind === "release"
-                  ? (knobNum("releaseVol") ?? RELEASE_VOLUME_PERCENT) / 100
-                  : 1),
+                (cc.kind === "release" ? RELEASE_VOLUME_PERCENT / 100 : 1),
               modulation: params[1]["resamp"].modulation,
               tempo: `!${note.tempo.toFixed(2)}`,
               pitches: encodePitch(
