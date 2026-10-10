@@ -252,6 +252,12 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       ? super.getVCTargetLength(note, vcOtoRecord, consonantParam)
       : consonantParam.lengthValue;
     const available = note.targetLength - (note.oto?.velocity ?? 0);
-    return full > available && available >= MIN_TAIL_MS ? available : full;
+    const fitted = full > available && available >= MIN_TAIL_MS ? available : full;
+    // 実験用: ノート長に対する末尾VCの長さの上限(割合)。早い曲で母音に時間を残すため
+    const frac = (globalThis as { __FRANKEN_TAIL_FRACTION?: number })
+      .__FRANKEN_TAIL_FRACTION;
+    return typeof frac === "number" && frac > 0
+      ? Math.min(fitted, Math.max(MIN_TAIL_MS, note.msLength * frac))
+      : fitted;
   }
 }
