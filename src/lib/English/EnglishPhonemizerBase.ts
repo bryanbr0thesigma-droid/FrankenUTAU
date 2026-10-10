@@ -10,7 +10,11 @@
  */
 import type OtoRecord from "utauoto/dist/OtoRecord";
 import type { ConsonantParam, ExtraTail } from "../Phonemizer/JPAutoPhonemizer";
-import { JPAutoPhonemizer, fixedPartMs, knob } from "../Phonemizer/JPAutoPhonemizer";
+import {
+  JPAutoPhonemizer,
+  fixedPartMs,
+  knob,
+} from "../Phonemizer/JPAutoPhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
 import {
@@ -62,6 +66,12 @@ const isPlus = (n: Note | undefined) =>
 /** CVの固定部分の長さ(ms)。子音速度(velocity)で縮む分を反映する */
 export const fixedMs = (note: Note): number =>
   (note.oto?.velocity ?? 0) * note.velocityRate;
+
+/**
+ * 語尾の閉鎖音に解放のピース(`k -`)を足すノートの最小の長さ(ms)。聞き比べで、300msの`stick`では
+ * 閉鎖音が聞こえるようになったが、200msの`up`では不自然になった
+ */
+export const MIN_RELEASE_NOTE_MS = 280;
 
 /** 短いノートで末尾VCを縮めるときの下限(ms)。これより短いと子音が聞き取れないので省く */
 export const MIN_TAIL_MS = 30;
@@ -247,7 +257,11 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       } else if (coda.length === 1 && stops.has(coda[0]) && nextIsSyllable) {
         // 次が`s`+子音で始まるとき(`bit slow`)は、聞こえない語尾の閉鎖音を省いて、語頭の`s`へ繋ぐ
         const lead = this.info.get(next)?.lead;
-        if (lead && fricatives.has(lead) && (this.syllableOf(next)?.syl.onset.length ?? 0) >= 2) {
+        if (
+          lead &&
+          fricatives.has(lead) &&
+          (this.syllableOf(next)?.syl.onset.length ?? 0) >= 2
+        ) {
           consonant = lead;
         }
       }
@@ -317,7 +331,13 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
       const record = find(`${coda[0]} ${coda[1]}`);
       return record ? { record, kind: "cluster" } : null;
     }
-    if (knob("release") && coda.length === 1 && ending && tailed && stops.has(coda[0])) {
+    if (
+      coda.length === 1 &&
+      stops.has(coda[0]) &&
+      tailed &&
+      ((ending && note.msLength >= MIN_RELEASE_NOTE_MS) ||
+        (knob("releaseMid") && !ending))
+    ) {
       const record = find(`${coda[0]} -`);
       return record ? { record, kind: "release" } : null;
     }
@@ -344,17 +364,9 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     vcOtoRecord: OtoRecord,
     consonantParam: ConsonantParam,
   ): number {
-    let full = note.next?.oto
+    const full = note.next?.oto
       ? super.getVCTargetLength(note, vcOtoRecord, consonantParam)
       : consonantParam.lengthValue;
-    // 実験用: 次の語頭の`s`(skull、slow)へ繋ぐ末尾VCは、短いと`s`が聞こえず`kull`になるので長めにする
-    const cur = this.syllableOf(note);
-    const sLead =
-      knob("longLead") &&
-      consonantParam.consonant === "s" &&
-      !!cur &&
-      !(cur.hasCoda && cur.syl.coda.length > 0);
-    if (sLead) full = Math.max(full, 90);
     const available = note.targetLength - fixedPartMs(note);
     const fitted =
       full > available && available >= MIN_TAIL_MS ? available : full;
@@ -362,7 +374,7 @@ export abstract class EnglishPhonemizerBase extends JPAutoPhonemizer {
     // ノート長のTAIL_FRACTION(35%)を上限にする(聞き比べで、無制限・50%より明瞭だった)
     const capped = Math.min(
       fitted,
-      Math.max(MIN_TAIL_MS, note.msLength * (sLead ? 0.5 : TAIL_FRACTION)),
+      Math.max(MIN_TAIL_MS, note.msLength * TAIL_FRACTION),
     );
     return capped;
   }

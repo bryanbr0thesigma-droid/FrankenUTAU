@@ -154,8 +154,9 @@ describe("short notes keep their tail consonant", () => {
     return params.length;
   };
 
-  it("plays CV + tail on a comfortable note", () => {
-    expect(paramCount(120, 480)).toBe(2);
+  it("plays CV + tail + the t release on a comfortable note", () => {
+    // 500ms以上のノートでは、語尾の閉鎖音の解放(`t -`)も足す
+    expect(paramCount(120, 480)).toBe(3);
   });
   it("still plays the tail on a short, fast note by shortening it", () => {
     // 150bpmの16分音符(約100ms)
@@ -405,5 +406,30 @@ describe("the last note of a song", () => {
     });
     expect(params.length).toBe(2);
     expect(aliasOf(params[1].resamp!.inputWav, params[1].resamp!.offsetMs)).toBe("ao r");
+  });
+});
+
+describe("release piece only on notes long enough", () => {
+  const count = (lyric: string, ticks: number) => {
+    const p = new EnglishARPAbetPhonemizer();
+    const mk = (l: string, len: number) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = len; n.phonemizer = p;
+      return n;
+    };
+    const notes = [mk(lyric, ticks), mk("R", 480)];
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb));
+    return p.getRequestParam(vb, notes[0], "", {
+      velocity: 100, intensity: 100, modulation: 0,
+      envelope: { point: [0, 5, 35, 0], value: [0, 100, 100, 0] },
+    });
+  };
+  it("stick (300ms) gets the k release at lower volume; up (200ms) does not", () => {
+    const stick = count("stick", 360);
+    expect(stick.length).toBe(3);
+    expect(stick[2].resamp!.intensity).toBeCloseTo(40, 6);
+    expect(count("up", 240).length).toBe(2);
   });
 });

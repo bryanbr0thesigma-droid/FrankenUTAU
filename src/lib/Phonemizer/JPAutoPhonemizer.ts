@@ -15,6 +15,8 @@ const MIN_EXTRA_TAIL_MS = 30;
 const MIN_CC_NOTE_MS = 280;
 /** 次の語頭の子音連続へ繋ぐピースを続けるとき、語尾の子音のVCに残す長さ(ms) */
 const LEAD_VC_MS = 25;
+/** 閉鎖音の解放ピースの音量(%)。100%だと破裂音が目立ちすぎる。聞き比べで50%と25%がどちらも良かった */
+const RELEASE_VOLUME_PERCENT = 40;
 const RELEASE_CLOSURE_MS = 20;
 const RELEASE_MS = 60;
 
@@ -33,7 +35,9 @@ export const knob = (name: string): boolean =>
 
 /** 実験用の数値の切替。無ければundefined */
 export const knobNum = (name: string): number | undefined => {
-  const v = (globalThis as { __FRANKEN?: Record<string, unknown> }).__FRANKEN?.[name];
+  const v = (globalThis as { __FRANKEN?: Record<string, unknown> }).__FRANKEN?.[
+    name
+  ];
   return typeof v === "number" ? v : undefined;
 };
 
@@ -551,8 +555,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
     // 末尾にCCも続けるピースの数。実際に使うときだけ数える
     if (nextConsonant && note.oto) {
       const target = this.getVCTargetLength(note, vcOtoRecord, nextConsonant);
-      const availableMs =
-        note.targetLength - fixedPartMs(note);
+      const availableMs = note.targetLength - fixedPartMs(note);
       if (
         this.planExtraTail(vb, note, nextConsonant, target, availableMs) !==
         null
@@ -652,8 +655,7 @@ export class JPAutoPhonemizer extends BasePhonemizer {
         vcOtoRecord,
         nextConsonant,
       );
-      const availableMs =
-        note.targetLength - fixedPartMs(note);
+      const availableMs = note.targetLength - fixedPartMs(note);
       /**
        * 末尾VCの後ろにもう1つピース(子音連続のCCや、閉鎖音の解放)を続けるときは、VCのプリウタランス位置から
        * 数えた残り長さTを、T = T1(VC) + T2(後ろのピース) + (後ろのピースのpre - overlap)に分ける。
@@ -768,7 +770,9 @@ export class JPAutoPhonemizer extends BasePhonemizer {
               cutoffMs: ccRecord.blank,
               intensity:
                 params[1]["resamp"].intensity *
-                (cc.kind === "release" ? (knobNum("releaseVol") ?? 100) / 100 : 1),
+                (cc.kind === "release"
+                  ? (knobNum("releaseVol") ?? RELEASE_VOLUME_PERCENT) / 100
+                  : 1),
               modulation: params[1]["resamp"].modulation,
               tempo: `!${note.tempo.toFixed(2)}`,
               pitches: encodePitch(
