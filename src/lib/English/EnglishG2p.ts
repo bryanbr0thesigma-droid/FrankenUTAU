@@ -75,6 +75,24 @@ export const loadEnglishDict = (): Promise<void> => {
   return loading;
 };
 
+/**
+ * 子音+`it`で終わる綴り(habit, vomit, summit, unit)や`-ity`(vanity)の弱母音は、辞書では`ah`だが、
+ * 実際は`ih`で発音される(habitが「ha-buht」でなく「ha-bit」)。聞き比べで`ih`のほうが近かった。
+ * @param word 小文字の綴り
+ * @param arpa 辞書のARPAbet音素列
+ */
+const unstressedIt = (word: string, arpa: string[]): string[] => {
+  const m = /[^aeiou]it(?:y|ies|s)?$/.exec(word);
+  if (!m || word.length < 5) return arpa;
+  // 最後の`ah t`を探す(後ろに`iy`/`z`/`s`が付いてもよい)
+  for (let i = arpa.length - 2; i >= 0; i--) {
+    if (arpa[i] === "ah" && arpa[i + 1] === "t") {
+      return [...arpa.slice(0, i), "ih", ...arpa.slice(i + 1)];
+    }
+  }
+  return arpa;
+};
+
 /** 辞書にない単語向けの簡易なつづり→音素規則。精度は低い */
 const spellToArpa = (word: string): string[] => {
   const rules: Array<[RegExp, string[]]> = [
@@ -174,6 +192,7 @@ export const wordToSymbols = (
       entry !== undefined &&
       entry.filter((p) => isVowel(p, "arpa")).length === 1;
     arpa = (oneSyllable ? entry : romaji ?? entry ?? spellToArpa(word))!;
+    if (entry !== undefined && arpa === entry) arpa = unstressedIt(word, arpa);
   }
   const syms =
     scheme === "arpa" ? arpa : arpa.map((p) => arpaToVccv[p] ?? p);

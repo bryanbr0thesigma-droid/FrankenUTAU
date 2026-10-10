@@ -295,6 +295,7 @@ describe("missing consonants: keep the vowel, use a voiced neighbour, and lead i
     const out = sing(["habit", "+", "R"]);
     expect(out[0][0]).toBe("hh ae");
     expect(out[0][1]).toBe("ae p");
-    expect(out[1][0]).toBe("b ah");
+    // 第2音節は、辞書のahでなくih(「ha-bit」)。聞き比べで近かった
+    expect(out[1][0]).toBe("b ih");
   });
 });

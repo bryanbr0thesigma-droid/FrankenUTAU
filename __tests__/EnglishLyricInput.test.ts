@@ -82,3 +82,21 @@ describe("typographic apostrophes", () => {
     expect(aliases(["don’t"])).toEqual(aliases(["don't"]));
   });
 });
+
+describe("-it endings: unstressed ih instead of the dictionary's ah", () => {
+  const vowelsOf = (w: string) => wordToSyllables(w, "arpa")!.map((s) => s.v);
+  it("habit, vomit, summit, unit, vanity", () => {
+    expect(vowelsOf("habit")).toEqual(["ae", "ih"]);
+    expect(vowelsOf("vomit")).toEqual(["aa", "ih"]);
+    expect(vowelsOf("summit")[1]).toBe("ih");
+    expect(vowelsOf("vanity")).toEqual(["ae", "ih", "iy"]);
+    expect(vowelsOf("habits")[1]).toBe("ih");
+  });
+  it("leaves other words alone", () => {
+    expect(vowelsOf("about")).toEqual(["ah", "aw"]); // `ah t`ではない
+    expect(vowelsOf("visit")).toEqual(["ih", "ih"]); // 辞書も元からih
+    expect(vowelsOf("fruit")).toEqual(["uw"]); // 母音+itなので対象外
+    expect(vowelsOf("bit")).toEqual(["ih"]);
+    expect(vowelsOf("it")).toEqual(["ih"]);
+  });
+});
