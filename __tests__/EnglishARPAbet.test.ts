@@ -574,7 +574,7 @@ describe("banks without bare vowels or vowel-to-vowel joins (VLGR)", () => {
     const rec2 = new Map(records);
     for (const k of [...rec2.keys()]) {
       // 母音単独と、母音→母音の繋ぎ(uw ah)を持たない音源にする
-      const t = k.split(" ");
+      const t = k.split(" ").map((x) => x.replace(/\d+$/, ""));
       const vowels = ["aa", "ae", "ah", "ao", "aw", "ay", "eh", "er", "ey", "ih", "iy", "ow", "oy", "uh", "uw"];
       if (t.every((x) => vowels.includes(x))) rec2.delete(k);
     }
