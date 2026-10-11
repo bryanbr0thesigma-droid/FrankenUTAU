@@ -64,7 +64,17 @@ export class EnglishARPAbetPhonemizer extends EnglishPhonemizerBase {
         prevCoda !== null
           ? this.pairs(cs, vowels, (c, x) => `${c} ${x}`)
           : vowels.map((x) => (prevV === null ? `- ${x}` : `${prevV} ${x}`));
-      return [...heads.map((alias) => ({ alias, lead: null })), ...bare];
+      // どれも無い音源(VLGRは母音単独の録音がほぼ無い)では、語頭の母音`- ah`で代用する。
+      // 前の語の母音から繋ぐ`uw ah`も無いと、`a`や`about`が無音になるため
+      const initial = vowels.map((x) => ({
+        alias: `- ${x}`,
+        lead: null as string | null,
+      }));
+      return [
+        ...heads.map((alias) => ({ alias, lead: null })),
+        ...bare,
+        ...initial,
+      ];
     }
     const last = onset[onset.length - 1];
     const lead = prevV === null ? null : onset[0];

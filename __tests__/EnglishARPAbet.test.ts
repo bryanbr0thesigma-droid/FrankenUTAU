@@ -568,3 +568,26 @@ describe("banks whose end pieces have a long run-up (VLGR v2)", () => {
     expect(cv.length + (vc.length - vc.overlap)).toBeCloseTo(notes[0].outputMs, 6);
   });
 });
+
+describe("banks without bare vowels or vowel-to-vowel joins (VLGR)", () => {
+  it("a vowel-initial word after a vowel falls back to the initial-vowel piece", () => {
+    const rec2 = new Map(records);
+    for (const k of [...rec2.keys()]) {
+      // 母音単独と、母音→母音の繋ぎ(uw ah)を持たない音源にする
+      const t = k.split(" ");
+      const vowels = ["aa", "ae", "ah", "ao", "aw", "ay", "eh", "er", "ey", "ih", "iy", "ow", "oy", "uh", "uw"];
+      if (t.every((x) => vowels.includes(x))) rec2.delete(k);
+    }
+    const vb2 = { getOtoRecord: (a: string) => rec2.get(a) ?? null } as any;
+    const p = new EnglishARPAbetPhonemizer();
+    const notes = ["you", "a", "R"].map((l, i) => {
+      const n = new Note();
+      n.lyric = l; n.tempo = 150; n.notenum = 60; n.length = 240; n.phonemizer = p;
+      return n;
+    });
+    // @ts-ignore
+    notes.forEach((n, i) => { n.prev = notes[i - 1]; n.next = notes[i + 1]; });
+    notes.forEach((n) => n.applyOto(vb2));
+    expect(notes[1].atAlias).toBe("- ah");
+  });
+});
