@@ -40,6 +40,10 @@ const vccvVowels = new Set("a @ u 9 8 I e 3 A i E O Q 6 o".split(" "));
 const arpaVowels = new Set(
   "aa ae ah ao aw ay eh er ey ih iy ow oy uh uw".split(" ")
 );
+export const arpaPhonemes = new Set([
+  ...arpaVowels,
+  ..."b ch d dh f g hh jh k l m n ng p r s sh t th v w y z zh".split(" "),
+]);
 export const isVowel = (s: string, scheme: PhonemeScheme = "vccv"): boolean =>
   (scheme === "arpa" ? arpaVowels : vccvVowels).has(s);
 
@@ -69,6 +73,24 @@ export const loadEnglishDict = (): Promise<void> => {
       loading = undefined;
     });
   return loading;
+};
+
+/**
+ * 子音+`it`で終わる綴り(habit, vomit, summit, unit)や`-ity`(vanity)の弱母音は、辞書では`ah`だが、
+ * 実際は`ih`で発音される(habitが「ha-buht」でなく「ha-bit」)。聞き比べで`ih`のほうが近かった。
+ * @param word 小文字の綴り
+ * @param arpa 辞書のARPAbet音素列
+ */
+const unstressedIt = (word: string, arpa: string[]): string[] => {
+  const m = /[^aeiou]it(?:y|ies|s)?$/.exec(word);
+  if (!m || word.length < 5) return arpa;
+  // 最後の`ah t`を探す(後ろに`iy`/`z`/`s`が付いてもよい)
+  for (let i = arpa.length - 2; i >= 0; i--) {
+    if (arpa[i] === "ah" && arpa[i + 1] === "t") {
+      return [...arpa.slice(0, i), "ih", ...arpa.slice(i + 1)];
+    }
+  }
+  return arpa;
 };
 
 /** 辞書にない単語向けの簡易なつづり→音素規則。精度は低い */
@@ -139,12 +161,30 @@ export const wordToSymbols = (
   scheme: PhonemeScheme = "vccv"
 ): string[] | null => {
   const hint = /^\[([a-z ]+)\]$/i.exec(lyric.trim());
+  // `k ae t`のように3音素以上をARPAbetだけで書いた歌詞も、`[k ae t]`と同じ発音指定として扱う
+  const bare = lyric.toLowerCase().trim().split(/\s+/);
+  const bareArpa =
+    bare.length >= 3 && bare.every((p) => arpaPhonemes.has(p)) ? bare : null;
+  // ARPAbet音源では、`ay`や`uw`のように音素1つだけの歌詞を、英単語ではなくその音素として読む
+  const bareVowel =
+    scheme === "arpa" && arpaVowels.has(lyric.toLowerCase().trim())
+      ? [lyric.toLowerCase().trim()]
+      : null;
   let arpa: string[];
-  if (hint) {
-    arpa = hint[1].toLowerCase().split(/\s+/).filter(Boolean);
+  if (hint || bareArpa || bareVowel) {
+    arpa =
+      bareArpa ??
+      bareVowel ??
+      hint![1].toLowerCase().split(/\s+/).filter(Boolean);
   } else {
-    const word = lyric.toLowerCase().replace(/[^a-z']/g, "");
-    if (word === "" || word !== lyric.toLowerCase().trim()) return null;
+    // 語頭語末の句読点(`hello,`など)は無視する。`!`は音源のエイリアスを直接指定する印なので除く
+    const text = lyric
+      .toLowerCase()
+      .trim()
+      .replace(/[\u2018\u2019\u02bc]/g, "'")
+      .replace(/^[,.;:?"“”()]+|[,.;:?"“”()]+$/g, "");
+    const word = text.replace(/[^a-z']/g, "");
+    if (word === "" || word !== text) return null;
     const entry = dict?.get(word);
     const romaji = romajiSyllable(word);
     // `ba`のようにCMUdictが文字の読み(b iy ey)を持つ短い綴りは、ローマ字読みを優先する
@@ -152,6 +192,7 @@ export const wordToSymbols = (
       entry !== undefined &&
       entry.filter((p) => isVowel(p, "arpa")).length === 1;
     arpa = (oneSyllable ? entry : romaji ?? entry ?? spellToArpa(word))!;
+    if (entry !== undefined && arpa === entry) arpa = unstressedIt(word, arpa);
   }
   const syms =
     scheme === "arpa" ? arpa : arpa.map((p) => arpaToVccv[p] ?? p);
