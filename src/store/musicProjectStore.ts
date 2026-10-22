@@ -2,9 +2,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { BasePhonemizer } from "../lib/BasePhonemizer";
 import { dumpNotes, Note } from "../lib/Note";
-import { isArpabetDiphoneBank, isVccvBank } from "../lib/English/detectScheme";
+import {
+  isArpabetDiphoneBank,
+  isVccvBank,
+  isXsampaBank,
+} from "../lib/English/detectScheme";
 import { EnglishARPAbetPhonemizer } from "../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { EnglishVCCVPhonemizer } from "../lib/Phonemizer/EnglishVCCVPhonemizer";
+import { EnglishXSampaPhonemizer } from "../lib/Phonemizer/EnglishXSampaPhonemizer";
 import { JPCVorVCVPhonemizer } from "../lib/Phonemizer/JPCVorVCVPhonemizer";
 import { Ust } from "../lib/Ust";
 import { BaseVoiceBank } from "../lib/VoiceBanks/BaseVoiceBank";
@@ -140,6 +145,8 @@ export const useMusicProjectStore = create<MusicProjectStore>()(
         // ARPAbetダイフォン音源(CASEなど)や英語VCCV/VCV音源は、英語phonemizerを自動で選ぶ
         const p = isArpabetDiphoneBank(vb)
           ? new EnglishARPAbetPhonemizer()
+          : isXsampaBank(vb)
+          ? new EnglishXSampaPhonemizer()
           : isVccvBank(vb)
           ? new EnglishVCCVPhonemizer()
           : null;

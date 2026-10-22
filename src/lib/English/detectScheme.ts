@@ -44,3 +44,19 @@ export const isVccvBank = (vb: BaseVoiceBank): boolean => {
   );
   return heads.length >= 4;
 };
+
+/** X-SAMPA記号のVCCV音源(重音テト英語など)に特徴的なエイリアス。`- b@`、`bA`、`@ b-`、`{ b-`など */
+const xsampaProbes = [
+  "- b@", "- bA", "- d@", "- bI", "- k{", "- sA", "- tI", "- mi",
+  "b@", "bA", "d@", "bI", "k{", "sA", "tI", "mi",
+  "@ b-", "{ b-", "A b-", "I b-", "i b-", "@ b", "{ b", "I b",
+];
+
+/**
+ * 音源がX-SAMPA記号の英語VCCV音源(`- b@`、`b@`、`@ b-`)かを判定する。
+ * ARPAbetやCZ-SAMPAの音源には、`@`と子音の間にスペースがある形(`- b@`)も、`{`を含むエイリアスも無い。
+ */
+export const isXsampaBank = (vb: BaseVoiceBank): boolean => {
+  const found = xsampaProbes.filter((a) => has(vb, a));
+  return found.length >= 14;
+};
