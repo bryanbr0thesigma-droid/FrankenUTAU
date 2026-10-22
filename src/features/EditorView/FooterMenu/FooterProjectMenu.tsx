@@ -21,7 +21,10 @@ import { convertHanziNotes } from "../../../lib/Chinese/hanziToPinyin";
 import { speedUpShortNotes } from "../../../lib/English/fastNoteVelocity";
 import { convertVccvNotes } from "../../../lib/English/vccvToArpa";
 import { normalizeJapaneseNotes } from "../../../lib/Japanese/normalizeKana";
-import { applyGlide } from "../../../lib/BatchProcess/NaturalPitchBatchProcess";
+import {
+  applyGlide,
+  hasPitchEdits,
+} from "../../../lib/BatchProcess/NaturalPitchBatchProcess";
 import { dumpNotes } from "../../../lib/Note";
 import { EnglishARPAbetPhonemizer } from "../../../lib/Phonemizer/EnglishARPAbetPhonemizer";
 import { undoManager } from "../../../lib/UndoManager";
@@ -184,7 +187,8 @@ export const FooterProjectMenu: React.FC<FooterProjectMenuProps> = ({
         );
       }
       // ustxのピッチは階段状でロボットのように聞こえるので、音が変わるところをなめらかにつなぐ
-      if (isUstx) applyGlide(ust.notes);
+      // ピッチを打っていないustも同じ(手で作り込んだustには触らない)
+      if (isUstx || !hasPitchEdits(ust.notes)) applyGlide(ust.notes);
       // ARPAbet音源で英語を歌わせるときは、短いノートの子音速度を上げて聞き取りやすくする
       if (
         vb !== null &&

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Note } from "../src/lib/Note";
-import { NaturalPitchBatchProcess, applyGlide } from "../src/lib/BatchProcess/NaturalPitchBatchProcess";
+import { NaturalPitchBatchProcess, applyGlide, hasPitchEdits } from "../src/lib/BatchProcess/NaturalPitchBatchProcess";
 
 const make = (spec: Array<[string, number, number]>) =>
   spec.map(([lyric, notenum, length]) => {
@@ -41,5 +41,19 @@ describe("NaturalPitchBatchProcess", () => {
     const out = new NaturalPitchBatchProcess().process(src, undefined as unknown as void);
     expect(out[1].pbw).toEqual([30]);
     expect(src[0].pbw).toBeUndefined();
+  });
+});
+
+describe("hasPitchEdits", () => {
+  it("is false for a plain note list and true once any note has its own pitch", () => {
+    const notes = make([["a", 60, 480], ["b", 62, 480]]);
+    expect(hasPitchEdits(notes)).toBe(false);
+    notes[1].setPbw([30]);
+    expect(hasPitchEdits(notes)).toBe(true);
+  });
+  it("counts a vibrato as a pitch edit", () => {
+    const notes = make([["a", 60, 480]]);
+    notes[0].vibrato = "65,180,35,20,20,0,0";
+    expect(hasPitchEdits(notes)).toBe(true);
   });
 });

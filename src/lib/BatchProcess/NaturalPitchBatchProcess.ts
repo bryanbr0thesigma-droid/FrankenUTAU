@@ -15,6 +15,18 @@ export const PORTAMENTO_MS = 80;
 export const PORTAMENTO_LEAD = 0.6;
 
 /**
+ * ノート列に、ピッチを自分で打ったノート(PBW/PBY/ビブラートがあるもの)が1つでもあるか。
+ * 手でピッチを作り込んだustは、勝手にポルタメントを足さない。
+ */
+export const hasPitchEdits = (notes: Note[]): boolean =>
+  notes.some(
+    (n) =>
+      (n.pbw !== undefined && n.pbw.length > 0) ||
+      (n.pby !== undefined && n.pby.length > 0) ||
+      n.vibrato !== undefined,
+  );
+
+/**
  * ノート列にポルタメントを付ける(その場で書き換える)。
  * @returns ポルタメントを付けたノートの数
  */
