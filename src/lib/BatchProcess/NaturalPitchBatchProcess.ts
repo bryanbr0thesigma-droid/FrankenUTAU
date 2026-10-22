@@ -31,17 +31,31 @@ export const hasPitchEdits = (notes: Note[]): boolean =>
  * @returns ポルタメントを付けたノートの数
  */
 export const applyGlide = (notes: Note[]): number => {
+  // 実験用: 聞き比べのため、ポルタメントの長さ(ms)を差し替える
+  const glideMs =
+    (globalThis as { __FRANKEN?: { glideMs?: number } }).__FRANKEN?.glideMs ??
+    PORTAMENTO_MS;
+  const vibMin = (globalThis as { __FRANKEN?: { vibratoMinMs?: number } })
+    .__FRANKEN?.vibratoMinMs;
   let count = 0;
   notes.forEach((n, i) => {
     if (n.lyric === "R") return;
+    // 実験用: 長めのノートに小さなビブラート
+    if (
+      vibMin !== undefined &&
+      n.vibrato === undefined &&
+      n.msLength >= vibMin
+    ) {
+      n.vibrato = "60,190,30,40,20,0,0";
+    }
     const hasPitch =
       (n.pbw !== undefined && n.pbw.length > 0) ||
       (n.pby !== undefined && n.pby.length > 0);
     const prev = notes[i - 1];
     // 前のノートが歌と続いているときだけ、前の音高から移る
     if (hasPitch || prev === undefined || prev.lyric === "R") return;
-    n.pbs = `${-PORTAMENTO_MS * PORTAMENTO_LEAD};0`;
-    n.setPbw([PORTAMENTO_MS]);
+    n.pbs = `${-glideMs * PORTAMENTO_LEAD};0`;
+    n.setPbw([glideMs]);
     n.setPby([0]);
     n.setPbm([""]);
     count++;
