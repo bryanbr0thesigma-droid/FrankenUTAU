@@ -28,6 +28,7 @@ type UstxPart = { position?: number; track_no?: number; notes?: UstxNote[] };
 type UstxProject = {
   tempos?: Array<{ position: number; bpm: number }>;
   bpm?: number;
+  tracks?: Array<{ track_name?: string }>;
   voice_parts?: UstxPart[];
 };
 
@@ -55,7 +56,9 @@ const toUstVbr = (v: UstxVibrato): string | undefined => {
 
 /**
  * ustxのテキストをustの行配列に変換する。`Ust.loadText`にそのまま渡せる。
- * 最も若いトラックのボイスパートを時間順に結合し、ノート間の隙間は休符で埋める。
+ * 取り込むのは1トラックだけ。`main`や`lead`という名前のトラックがあればそれを、無ければ最も若いトラックを
+ * 選ぶ(ハモリのトラックが先頭にあっても主旋律を取り込むため)。
+ * そのボイスパートを時間順に結合し、ノート間の隙間は休符で埋める。
  * @param text ustxファイルの内容
  */
 export const ustxToUstLines = (text: string): string[] => {
@@ -66,7 +69,13 @@ export const ustxToUstLines = (text: string): string[] => {
   const parts = (project.voice_parts ?? []).filter(
     (p) => Array.isArray(p.notes) && p.notes.length > 0
   );
-  const firstTrack = Math.min(...parts.map((p) => p.track_no ?? 0));
+  const trackNos = [...new Set(parts.map((p) => p.track_no ?? 0))];
+  const mainTrack = trackNos
+    .filter((no) =>
+      /\b(main|lead)\b/i.test(project.tracks?.[no]?.track_name ?? "")
+    )
+    .sort((a, b) => a - b)[0];
+  const firstTrack = mainTrack ?? Math.min(...trackNos);
   const notes = parts
     .filter((p) => (p.track_no ?? 0) === firstTrack)
     .flatMap((p) =>

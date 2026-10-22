@@ -42,3 +42,32 @@ describe("ustx", () => {
     );
   });
 });
+
+describe("track selection", () => {
+  const multi = (names: string[]) => `
+tempos: [{position: 0, bpm: 120}]
+tracks: [${names.map((n) => `{track_name: "${n}"}`).join(", ")}]
+voice_parts:
+${names
+  .map(
+    (n, i) =>
+      `- {track_no: ${i}, position: 0, notes: [{position: 0, duration: 480, tone: ${60 + i}, lyric: ${n.replace(/\W/g, "")}}]}`
+  )
+  .join("\n")}
+`;
+  const lyricsOf = (text: string) => {
+    const ust = new Ust();
+    ust.loadText(ustxToUstLines(text));
+    return ust.notes.map((n) => n.lyric);
+  };
+
+  it("imports the track named main even when a harmony track comes first", () => {
+    expect(lyricsOf(multi(["high harmony", "low harmony", "main", "rah"]))).toEqual(["main"]);
+  });
+  it("also recognizes lead", () => {
+    expect(lyricsOf(multi(["harmony", "Lead Vocal"]))).toEqual(["LeadVocal"]);
+  });
+  it("falls back to the first track when none is named main or lead", () => {
+    expect(lyricsOf(multi(["alto", "soprano"]))).toEqual(["alto"]);
+  });
+});

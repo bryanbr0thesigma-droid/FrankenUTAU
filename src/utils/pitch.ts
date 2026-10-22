@@ -77,6 +77,22 @@ export const encodePitch = (values: Array<number>): string => {
 };
 
 /**
+ * ピッチ列のstartIndex番目以降を返す。
+ * startIndexが負のとき(VCがピッチ列の始まりより前から始まるとき)に`slice`へそのまま渡すと、
+ * 配列の末尾から数えてしまい、VCに音符の終わりのピッチだけが渡って音程が跳ねる。
+ * その場合は、先頭の値で前を埋めて伸ばす。
+ * @param pitch ピッチ列
+ * @param startIndex 切り出し開始位置(負でもよい)
+ */
+export const pitchFromIndex = (
+  pitch: Array<number>,
+  startIndex: number
+): Array<number> =>
+  startIndex >= 0
+    ? pitch.slice(startIndex)
+    : [...new Array<number>(-startIndex).fill(pitch[0] ?? 0), ...pitch];
+
+/**
  * 音高名を与えて基準ピッチの周波数(Hz)を返す
  * @param tone 音高名
  * @returns 周波数

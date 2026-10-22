@@ -29,7 +29,7 @@ export class EnglishVCCVPhonemizer extends EnglishPhonemizerBase {
   name = "phonemizer.EnglishVCCVPhonemizer";
   protected readonly scheme: PhonemeScheme = "vccv";
 
-  protected cvCandidates({ onset, v, isExt, prevV }: CvContext): CvCandidate[] {
+  protected cvCandidates({ onset, v, isExt, prevV, prevCoda }: CvContext): CvCandidate[] {
     if (isExt) return [{ alias: v, lead: null }];
     const out: CvCandidate[] = [];
     const add = (alias: string, lead: string | null = null) =>
@@ -49,6 +49,8 @@ export class EnglishVCCVPhonemizer extends EnglishPhonemizerBase {
         add(`${last}${v}`);
       }
     } else if (onset.length === 0) {
+      // 直前が子音で終わっていたら、その子音から母音へ
+      if (prevCoda !== null) add(`${prevCoda}${v}`);
       // 母音から母音へ
       add(`${prevV}${v}`);
       add(`${prevV} ${v}`);

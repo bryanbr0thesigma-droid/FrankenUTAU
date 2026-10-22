@@ -8,7 +8,7 @@ import { defaultNote } from "../../config/note";
 import { defaultParam } from "../../types/note";
 import { AppendRequestBase, ResampRequest } from "../../types/request";
 import { noteNumToTone } from "../../utils/Notenum";
-import { encodePitch } from "../../utils/pitch";
+import { encodePitch, pitchFromIndex } from "../../utils/pitch";
 import { BasePhonemizer } from "../BasePhonemizer";
 import { Note } from "../Note";
 import { BaseVoiceBank } from "../VoiceBanks/BaseVoiceBank";
@@ -460,16 +460,18 @@ export class JPPresampPhonemizer extends BasePhonemizer {
          * cvPitchの前半部分を削除してvcPitchを得る
          * ノートの開始位置を0とすると、cvPitchは-baseNotePitchOffset(ms)から始まっている。
          * vcの0位置はノートの開始位置+dividerOffset(ms)であり、そこからdividerParamOffset(ms)分だけ前にずらした位置がvcPitchの0位置となる。
-         * よって、vcPitchの0位置はcvPitchの-baseNotePitchOffset + dividerOffset - dividerParamOffset(ms)となる。
-         * したがって、vcPitchの0位置までのcvPitch部分を削除すればよい。
+         * よって、vcPitchの0位置は、ノートの開始位置から見て dividerOffset - dividerParamOffset(ms) であり、
+         * cvPitchの先頭(-baseNotePitchOffset)から数えると baseNotePitchOffset + dividerOffset - dividerParamOffset(ms) 目となる。
+         * (以前は先頭からの距離を -baseNotePitchOffset としていたため、baseNotePitchOffsetの2倍だけ早い位置のピッチを渡していた)
+         * したがって、その位置までのcvPitch部分を削除すればよい。
          * cvPitchはnote.pitchSpan(s)で等間隔にサンプリングされているため、msをindexに変換するにはnote.pitchSpanで割る。
          */
         const vcPitchStartIndex = Math.floor(
-          (-baseNotePitchOffset + dividerOffset - dividerParamOffset) /
+          (baseNotePitchOffset + dividerOffset - dividerParamOffset) /
             1000 /
             note.pitchSpan
         );
-        const vcPitch = cvPitch.slice(vcPitchStartIndex);
+        const vcPitch = pitchFromIndex(cvPitch, vcPitchStartIndex);
         params[1]["resamp"] = {
           inputWav:
             vcOtoRecord.dirpath !== ""

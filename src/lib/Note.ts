@@ -182,6 +182,17 @@ export class Note {
     this._preutter = Math.max(value, 0);
     this.autoFitParam();
   }
+  /**
+   * 先行発声・オーバーラップ・stpの入力値を未指定に戻し、原音設定の値を使うようにする。
+   * 別の音源向けに保存された値が残っていると、タイミングがずれるため。
+   */
+  clearTimingOverrides(): void {
+    this._preutter = undefined;
+    this._overlap = undefined;
+    this._stp = undefined;
+    this._oto = undefined;
+  }
+
   /** オーバーラップの入力値 */
   get overlap(): number {
     return this._overlap;
