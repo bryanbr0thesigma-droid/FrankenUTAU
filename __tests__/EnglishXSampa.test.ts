@@ -107,3 +107,15 @@ describe("splitMultiSyllableWords", () => {
     expect(splitMultiSyllableWords(make(["reality", "R"], [100, 480]), "xsampa")).toBeNull();
   });
 });
+
+describe("missing pieces use a similar vowel (Teto has no bV / V b)", () => {
+  it("but sings b@ (and @ t-) instead of staying silent", () => {
+    expect(records.has("bV")).toBe(false);
+    const out = sing(["but", "R"]);
+    expect(out[0][0]).toBe("- b@");
+    expect(out[0][1]).toBe("V t-"); // V t-はある(無いのはV b)
+  });
+  it("keeps the exact vowel when it exists", () => {
+    expect(sing(["cut", "R"])[0][0]).toBe("- kV");
+  });
+});
