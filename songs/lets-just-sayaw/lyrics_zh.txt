@@ -1,0 +1,71 @@
+# Mandarin lyrics for "Let's Just Sayaw", read by build_mandarin_svp.py.
+# start_beat end_beat | Mandarin | original English
+# Every lead note whose onset falls in [start, end] gets one character, in order; spaces are ignored.
+# [br] = breath note, 啦* = every note in the range sings 啦. The script stops if a count is off.
+# section: Verse 1
+31.0 31.9 | [br] | (breath)
+32.0 40.9 | 每一天 无聊到发慌 被延迟捆绑 枯燥的任务 一波波任务 | Everyday's feeling like a drag, suffering from the lag, monotonous tasks, coming endless tasks
+41.0 45.9 | 又一次打卡 用同样方法 反思 | Clocking in again with the same approach, reflect
+46.0 48.7 | 等等 何时完 | Wait, when will this end?
+48.75 52.9 | 这里的嗡嗡声 追逐不停 | The humming of this place, an endless chase
+53.0 56.9 | 这一切 就图加薪的可能 | All of this just for a chance of a raise
+57.0 61.9 | 真的值得吗 赌命 赌上理智 不 | Is it really worth my fate, my sanity? No.
+62.0 64.9 | 坦白 但我需要钱 | Frankly, but I need some cash
+65.0 72.9 | 早上六点起床 不想去 但必须 要付账单 靠 | Wake up at six AM, don't want to but I gotta, bills to pay too. DAMN
+73.0 80.9 | 打卡晚一点 路上堵成一片 可我工资 扣到只剩 哇 | Clocked in a bit late, traffic wasn't that great, but I get my pay reduced to... WOW
+81.0 88.9 | 一叠文件在手 然后跳起舞 跟这节奏的迷幻 哦 | Paperwork in my hands, then I start to dance to the rhythm of this trance. Whoa
+89.0 95.9 | 哟 你感到律动 我忍不住随歌起舞 | Yo, you feeling this groove? I can't help but dance to the tune.
+# section: Pre-chorus 1
+96.0 103.9 | 一 二 无新意 三 四 再加班去 | One, two, nothing new, three, four, go work some more,
+104.0 111.9 | 五 六 同样套路 但有歌 忍不住随歌起舞 | five, six, the same old trick, but with song, can't help but dance to the tune.
+112.0 123.9 | 三条投诉先到 两份报告要交 一件又有何好 | Three more complaints before, two more reports to store, one last, but what's it for?
+124.75 127.9 | 那我就随歌起舞 | So I just dance to the tune.
+# section: Chorus 1
+128.5 132.4 | [br] 不用再忧虑 | No need to worry
+132.75 135.9 | [br] 舞步讲故事 | Steps tell a story
+136.0 141.4 | 远离带走烦忧的灵魂 | Stray from the soul that takes your worries
+141.5 144.9 | 从失去到永恒 | From loss to legacy
+145.5 148.9 | 我无拘无束 | I feel untethered
+149.0 153.4 | 表演者 我就像是在燃烧 | Performer, I feel like I'm on fire
+153.5 157.9 | 但我一点不疲劳 | yet I do not feel tired
+158.0 161.4 | 为何我们信谎言 | Why do we feed into such lies?
+161.5 164.9 | 而今舞翩翩 | But now I dance here
+165.5 170.2 | 前途看不见 又是一天 | Career? Nothing's clear. Another day here,
+170.2 177.4 | 可一切一成不变啊 一遍一遍虚幻 | yet it's all the same routine, ah, again and again, unreal
+177.5 180.9 | 做梦在脚尖 | Dreaming with my feet
+181.5 189.9 | 我仍迷茫 直到我烦恼全消散 | I'm still lost, so until my problems go away
+190.0 193.4 | 跳舞吧 | Let's just dance
+# section: La la la
+193.5 220.5 | 啦* | la la la
+# section: Verse 2
+224.0 227.4 | 嘿 日复一日全一样 | HEY! Day in, day out, it's all the same
+227.5 232.4 | 休息无望 想睡却睁眼到天亮 | can't catch a break, wanna sleep but I'm wide awake
+232.5 237.4 | 厕所打盹被老板抓 我连抱怨也不能 | Caught napping in the stall, boss called, yet I can't even complain
+237.5 239.9 | 敢说就被 | If you do, you're f—
+240.75 243.9 | 一遍又一遍 再来一遍 | Again and again and then again
+244.0 248.4 | 等等 请你来定义 疯狂的含义 | Wait, please define the meaning of insanity
+248.5 251.9 | 在这现实里 全是空洞虚荣而已 | In reality, it's all an empty vanity
+252.0 255.9 | 哦 好一场悲剧 对我 和我的理智 | Oh, what a tragedy for me and my sanity
+256.0 263.9 | 又回到这里 又旧又冷受控制 忙到十 | Here we are again, same old, same cold place, controlled, work till ten
+264.0 269.9 | 疑惑又一次 我是否对 反思 | wondering again if I'm correct, reflect
+270.0 272.9 | 等等 何时完 | Wait, when will this end?
+# section: Pre-chorus 2
+273.0 279.9 | 不知往哪走 又一件杂事在办公楼 | Don't know where to go, another chore on the office floor
+280.0 287.9 | 钟滴答合节奏 旋律起 忍不住随歌起舞 | Clock ticks, the rhythm clicks, so with song, can't help but dance to the tune.
+288.0 300.4 | 三个疑虑先丢 两只脚往前走 一步迈出门口 | Three more doubts to ignore, two more feet to the floor, one last step through the door.
+300.75 303.9 | 我们一起随歌起舞 | Together we dance to the tune.
+# section: Chorus 2
+304.0 308.4 | 耶 我不再忧虑 | Yeah, I do not worry
+308.75 311.9 | [br] 舞步诉往事 | Steps told a story
+312.0 317.4 | 远离带走我烦忧的魂 | Stray from my soul that took my worries
+317.5 320.9 | 从失去到交响 | From loss to symphony
+321.5 324.9 | 我仍无拘束 | I'm still untethered
+325.0 329.4 | 到永远 我燃得更旺 | Forever, I'm burning brighter
+329.5 333.9 | 我的灵魂更飞扬 | My soul is lifted higher
+334.0 337.4 | 为何我竟信谎言 | Why did I feed into such lies?
+337.5 340.9 | 而今舞翩翩 | And now I dance here
+341.5 346.2 | 眼前全看见 终于这天 | My mind fully clear, finally here
+346.2 353.4 | 而一切太明显啊 一遍一遍梦幻 | and it's all so damn clear, ah, again and again, surreal
+353.5 356.9 | 我站在脚尖 | I'm here with my feet
+357.5 365.9 | 我真自由 从今 所有烦恼被冲散 | I'm truly free since now all my worries washed away
+366.0 369.9 | 跳舞吧 | Let's just dance
