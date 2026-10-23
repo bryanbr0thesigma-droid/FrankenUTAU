@@ -56,14 +56,21 @@ vocal track. A full song synthesizes in about 2-3 minutes; bounce after the pane
 ## What Basic + Teto Lite can and can't do
 
 - Sings Japanese well. **English (cross-lingual) singing needs SynthV Pro**: Basic has no
-  language selector and ignores `languageOverride`, so English lyrics come out as Japanese
-  sounds. Basic also has no Rap mode (rap notes are sung).
+  language selector and ignores a track's `languageOverride`, so English lyrics come out as
+  Japanese sounds. A **per-note** override (e.g. Mandarin lines, `phonesetOverride: xsampa`)
+  renders as silence; `apply_lyrics.py` clears them. Basic also has no Rap mode (rap notes are
+  sung). After a render, check every note has sound (see `boost.note_db`).
 - Pro and paid voices need the owner's own activation code. Never bypass activation: no cracks,
   keygens or loaders (e.g. "YumeKey", "SV#", "Obsidian" loaders), even if asked.
-- Projects saved by SynthV 2 won't open in Basic; convert them with `for_basic.py`.
+- Projects saved by SynthV 2 won't open in Basic; convert them with `for_basic.py` (it also moves
+  per-group voices onto the track, since Basic only reads the track's voice).
+- **Basic only renders the first 3 tracks** of a project. For more, render in passes with
+  `render_config.py --tracks 0,1,2` / `--tracks 3,4` and add the stems up with `sum_stems.py`.
 - Low notes (below about A3) come out soft and breathy with Teto; use `boost.py`.
 
 ## Song workflow (see songs/lets-just-sayaw/ for a complete example)
+
+Ask before committing someone else's project or instrumental to the repo.
 
 1. `for_basic.py original.svp basic.svp` - open SV2 projects in Basic, voice set to Teto Lite.
 2. `beat_cells.py basic.svp` - see each phrase's notes on the beat grid.
@@ -74,7 +81,11 @@ vocal track. A full song synthesizes in about 2-3 minutes; bounce after the pane
    should both be 0.
 6. Render stems, then `boost.py japanese.svp boosted.svp 0:stem_main.wav:-19.5 2:stem_backing.wav:-20.5`
    and render again - evens out quiet passages inside SynthV instead of compressing afterwards.
-7. `mix.py vocals.wav out.wav --inst instrumental.wav [--ride 115.5:156.5:2.5]` for a full mix,
+   Pick each target near that stem's loud notes (about its 95th-percentile note level).
+7. With several vocal tracks, balance them with `sum_stems.py vocals.wav main.wav high.wav:-6 ...`
+   (keep harmonies a few dB under the lead so the words stay clear; Teto's octave-up harmonies
+   render much louder than a low lead).
+8. `mix.py vocals.wav out.wav --inst instrumental.wav [--ride 115.5:156.5:2.5]` for a full mix,
    or `mix.py vocals.wav vocals_master.wav` for vocals only.
 
 ### Japanese lyric rules learned on this project (the user cares a lot about these)

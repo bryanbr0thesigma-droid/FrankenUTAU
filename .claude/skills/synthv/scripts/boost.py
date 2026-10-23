@@ -19,6 +19,7 @@ import svp  # noqa: E402
 
 RATE = 8000
 MAX_DB = 12.0
+SILENT_DB = -60.0
 
 
 def mono(path):
@@ -41,22 +42,34 @@ def curve_value(points, blick):
     return pts[-1][1]
 
 
+def note_db(audio, blick_offset, n, bpm):
+    s0 = (blick_offset + n["onset"]) / svp.Q * 60 / bpm
+    s1 = s0 + n["duration"] / svp.Q * 60 / bpm
+    seg = audio[int(s0 * RATE):int(s1 * RATE)]
+    rms = math.sqrt(float(np.mean(seg ** 2))) if len(seg) else 0.0
+    return 20 * math.log10(max(rms, 1e-9))
+
+
 def boost_track(d, track_index, wav, target):
     bpm = d["time"]["tempo"][0]["bpm"]
     audio = mono(wav)
     lib = {g["uuid"]: g for g in d["library"]}
+    # A group can be placed more than once (a repeated chorus); its curve is shared, so measure
+    # every placement and boost once by the average.
+    offsets = {}
     for ref in d["tracks"][track_index].get("groups", []):
-        g = lib[ref["groupID"]]
+        offsets.setdefault(ref["groupID"], []).append(ref["blickOffset"])
+    for gid, offs in offsets.items():
+        g = lib[gid]
         old = g["parameters"]["loudness"]["points"]
-        pts = []
+        pts, silent = [], []
         for notes in svp.group_phrases(g):
             raw = []
             for n in notes:
-                s0 = (ref["blickOffset"] + n["onset"]) / svp.Q * 60 / bpm
-                s1 = s0 + n["duration"] / svp.Q * 60 / bpm
-                seg = audio[int(s0 * RATE):int(s1 * RATE)]
-                rms = math.sqrt(float(np.mean(seg ** 2))) if len(seg) else 0.0
-                raw.append(None if n["lyrics"] == "br" else target - 20 * math.log10(max(rms, 1e-9)))
+                levels = [note_db(audio, off, n, bpm) for off in offs]
+                if n["lyrics"] != "br" and max(levels) < SILENT_DB:
+                    silent.append(n["lyrics"])
+                raw.append(None if n["lyrics"] == "br" else target - sum(levels) / len(levels))
             for i, n in enumerate(notes):
                 window = [b for b in raw[max(0, i - 2):i + 3] if b is not None]
                 extra = statistics.median(window) if window else 0.0
@@ -65,7 +78,10 @@ def boost_track(d, track_index, wav, target):
         g["parameters"]["loudness"] = {"mode": "cubic", "points": pts}
         vals = pts[1::2]
         if max(vals) > 0.5:
-            print(f"track {track_index} {g['name'].strip():28} boost avg {sum(vals) / len(vals):4.1f} dB, max {max(vals):4.1f} dB")
+            print(f"track {track_index} {g['name'].strip():20} x{len(offs)} boost avg {sum(vals) / len(vals):4.1f} dB, max {max(vals):4.1f} dB")
+        if silent:
+            print(f"warning: track {track_index} {g['name'].strip()}: {len(silent)} notes rendered silent "
+                  f"({' '.join(silent[:8])}...); check their language overrides")
 
 
 def main(src, dst, *specs):

@@ -20,13 +20,18 @@ def write_sheet(d, groups, path, title):
     lib = {g["uuid"]: g for g in d["library"]}
     bpm = d["time"]["tempo"][0]["bpm"]
     out = [f"# {title}", ""]
+    # Tracks singing the same words at the same times (harmony stacks) are listed once.
+    same = {}
     for t in d["tracks"]:
-        uses = [(r["blickOffset"] + min(n["onset"] for n in lib[r["groupID"]]["notes"]), lib[r["groupID"]])
-                for r in t.get("groups", []) if lib.get(r["groupID"], {}).get("notes")]
-        if not uses:
-            continue
-        out += [f"## Track: {t['name']}", ""]
-        for start, g in sorted(uses, key=lambda u: u[0]):
+        uses = sorted([(r["blickOffset"] + min(n["onset"] for n in lib[r["groupID"]]["notes"]), lib[r["groupID"]])
+                       for r in t.get("groups", []) if lib.get(r["groupID"], {}).get("notes")], key=lambda u: u[0])
+        if uses:
+            key = tuple((start // (svp.Q // 4), tuple(p[1] for p in groups[g["uuid"][:8]])) for start, g in uses)
+            same.setdefault(key, []).append((t["name"], uses))
+    for tracks in same.values():
+        uses = min((u for _, u in tracks), key=lambda u: sum(len(g["name"]) for _, g in u))
+        out += [f"## Track: {', '.join(name for name, _ in tracks)}", ""]
+        for start, g in uses:
             secs = start / svp.Q * 60 / bpm
             out += [f"### {int(secs // 60)}:{int(secs % 60):02d} ({g['name'].strip()})", ""]
             for p in groups[g["uuid"][:8]]:
@@ -68,6 +73,9 @@ def main():
                 continue
             for n, tok in zip(notes, toks):
                 n["lyrics"], n["phonemes"], n["musicalType"] = tok, "", "singing"
+                # Per-note language overrides (e.g. Mandarin lines) make Basic render silence.
+                n.get("attributes", {}).pop("languageOverride", None)
+                n.get("attributes", {}).pop("phonesetOverride", None)
     if errors:
         sys.exit("\n".join(errors))
     for t in d["tracks"]:

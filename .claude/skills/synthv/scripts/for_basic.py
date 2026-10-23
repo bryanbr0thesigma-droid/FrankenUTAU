@@ -2,8 +2,10 @@
 
 Usage: python3 -I for_basic.py <in.svp> <out.svp> [--voice "Kasane Teto (Lite)"]
 Basic 1.10 refuses projects saved by newer versions; the note data is compatible, so this
-lowers the format version and swaps every assigned voice for the given one. Language
-overrides are kept (Basic ignores them; cross-lingual singing needs Pro).
+lowers the format version and gives every track that has a voice the given one. SynthV 2 can
+assign voices per note group; Basic takes the voice from the track, so the voice goes on the
+track and its groups inherit it. Language overrides are kept (Basic ignores them;
+cross-lingual singing needs Pro).
 """
 import argparse
 import os
@@ -28,12 +30,15 @@ def main():
     d["version"] = 151
     swapped = 0
     for t in d["tracks"]:
-        for ref in [t["mainRef"]] + t.get("groups", []):
-            if ref["database"].get("name"):
-                ref["database"].update(VOICES[a.voice])
-                swapped += 1
+        groups = t.get("groups", [])
+        if not any(ref["database"].get("name") for ref in [t["mainRef"]] + groups):
+            continue
+        t["mainRef"]["database"].update(VOICES[a.voice])
+        for ref in groups:
+            ref["database"].update(name="", language="", phoneset="", backendType="", version="-2")
+        swapped += 1
     svp.save(d, a.dst)
-    print(f"{a.dst}: version 151, {swapped} voice assignments -> {a.voice}")
+    print(f"{a.dst}: version 151, {swapped} tracks -> {a.voice}")
 
 
 if __name__ == "__main__":
