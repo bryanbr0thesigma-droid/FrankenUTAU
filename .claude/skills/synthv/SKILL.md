@@ -75,8 +75,8 @@ Ask before committing someone else's project or instrumental to the repo.
 1. `for_basic.py original.svp basic.svp` - open SV2 projects in Basic, voice set to Teto Lite.
 2. `beat_cells.py basic.svp` - see each phrase's notes on the beat grid.
 3. Write `lyrics_ja.py` (format in `apply_lyrics.py`): one Japanese syllable per note. If a line
-   needs one more syllable than it has notes, `split_note.py` splits a held note in two at the
-   same pitch (do it on every harmony group that sings the line); the melody is unchanged.
+   needs one more syllable than it has notes, `split_note.py` can split a long held note (a
+   quarter or more) into eighths at the same pitch (on every harmony group that sings the line).
 4. `apply_lyrics.py basic.svp lyrics_ja.py japanese.svp --sheet sheet.md` - fails loudly if any
    phrase's syllable count doesn't match its notes.
 5. `rhythm_check.py basic.svp lyrics_ja.py --list` - particles on beats and squeezed syllables
@@ -95,7 +95,11 @@ Ask before committing someone else's project or instrumental to the repo.
 - **Meaning first.** Each line must say what the English says, in natural Japanese a native
   listener understands. Never trade meaning for rhyme or rhythm; show the user a back-translation
   of every line and flag anything that changed. Recommend a native-speaker read before release.
-- One sung syllable (mora) per note; `ん`/`っ` can share a note; never two syllables on a 16th.
+- One sung syllable per note, and never split a note into 16ths or put two different vowels on one
+  note: it sounds crammed. A long vowel or `ん`/`っ` can stay inside its syllable's note (write
+  long vowels doubled, e.g. `もお` for もう, so the note holds one vowel). Only split long notes
+  (a quarter or more) into whole eighths. If the meaning doesn't fit the notes, find shorter
+  wording, not more syllables.
 - No particles (の に が を で も ね よ だ か) on beats. Strong beats (1 and 3) get a word start,
   a pickup into a word, or a held line ending; beats 2 and 4 may fall mid-word.
 - Write tokens as sung: は→わ, へ→え, を→お; `br` is a breath; use `う`/`い` for long vowels, not `ー`.
