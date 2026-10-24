@@ -25,7 +25,12 @@ ARG=()
 [ -n "${1:-}" ] && ARG=("$(winepath -w "$1")")
 cd "$APP" && (nohup wine synthv-studio.exe "${ARG[@]}" >"${TMPDIR:-/tmp}/synthv.log" 2>&1 &)
 for i in $(seq 1 60); do xdotool search --name "Synthesizer V Studio" >/dev/null 2>&1 && break; sleep 1; done
-sleep 8
+# Wait for the "No audio device is available" dialog (its side band is #724436); it can take
+# much longer than usual to appear when the machine is busy.
+for i in $(seq 1 40); do
+  [ "$(import -window root -crop 1x1+605+470 txt:- 2>/dev/null | grep -o '#724436')" ] && break
+  sleep 1
+done
 xdotool mousemove 939 490 click 1   # OK on "No audio device is available"
 sleep 2
 xdotool mousemove 939 512 click 1   # Cancel on "A newer version ... is available" (harmless if absent)
