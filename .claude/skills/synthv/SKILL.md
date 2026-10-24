@@ -74,7 +74,9 @@ Ask before committing someone else's project or instrumental to the repo.
 
 1. `for_basic.py original.svp basic.svp` - open SV2 projects in Basic, voice set to Teto Lite.
 2. `beat_cells.py basic.svp` - see each phrase's notes on the beat grid.
-3. Write `lyrics_ja.py` (format in `apply_lyrics.py`): one Japanese syllable per note.
+3. Write `lyrics_ja.py` (format in `apply_lyrics.py`): one Japanese syllable per note. If a line
+   needs one more syllable than it has notes, `split_note.py` splits a held note in two at the
+   same pitch (do it on every harmony group that sings the line); the melody is unchanged.
 4. `apply_lyrics.py basic.svp lyrics_ja.py japanese.svp --sheet sheet.md` - fails loudly if any
    phrase's syllable count doesn't match its notes.
 5. `rhythm_check.py basic.svp lyrics_ja.py --list` - particles on beats and squeezed syllables
@@ -99,3 +101,7 @@ Ask before committing someone else's project or instrumental to the repo.
 - Write tokens as sung: は→わ, へ→え, を→お; `br` is a breath; use `う`/`い` for long vowels, not `ー`.
 - Where groups overlap on the same track, sing the same syllables in the overlap.
 - Rhyme (vowel endings) only where the English rhymes and it costs no meaning.
+- Keep metaphors and refrains literal: translate the image the writer chose ("trying not to bite
+  it" stays biting, not the slang "die"), and keep English chant words (sung as loanwords,
+  e.g. アップ / ダウン) instead of swapping in a Japanese equivalent. Ask when a phrase has two
+  readings.
