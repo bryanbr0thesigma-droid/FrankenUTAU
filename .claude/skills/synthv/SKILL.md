@@ -91,12 +91,13 @@ Ask before committing someone else's project or instrumental to the repo.
 1. `for_basic.py original.svp basic.svp` - open SV2 projects in Basic, voice set to Teto Lite.
 2. `beat_cells.py basic.svp` - see each phrase's notes on the beat grid.
 3. Write `lyrics_ja.py` (format in `apply_lyrics.py`): one Japanese syllable per note. If a line
-   needs one more syllable than it has notes, `split_note.py` can split a long held note (a
-   quarter or more) into eighths at the same pitch (on every harmony group that sings the line).
-4. `apply_lyrics.py basic.svp lyrics_ja.py japanese.svp --sheet sheet.md` - fails loudly if any
+   needs one more syllable than it has notes, list a split of a long held note (a quarter or
+   more, into eighths at the same pitch, on every harmony group that sings the line) in the
+   module's `SPLITS`; `apply_splits.py basic.svp lyrics_ja.py split.svp` applies them.
+4. `apply_lyrics.py split.svp lyrics_ja.py japanese.svp --sheet sheet.md` - fails loudly if any
    phrase's syllable count doesn't match its notes.
-5. `rhythm_check.py basic.svp lyrics_ja.py --list` - particles on beats and squeezed syllables
-   should both be 0.
+5. `rhythm_check.py split.svp lyrics_ja.py --list` - particles on beats, squeezed syllables and
+   crammed notes (two different syllables on one note, e.g. かけ) should all be 0.
 6. Render stems, then `boost.py japanese.svp boosted.svp 0:stem_main.wav:-19.5 2:stem_backing.wav:-20.5`
    and render again - evens out quiet passages inside SynthV instead of compressing afterwards.
    Pick each target near that stem's loud notes (about its 95th-percentile note level).
