@@ -53,6 +53,22 @@ $S/open.sh out.svp && $S/bounce.sh /tmp/render take1 170    # wait ~170 s for sy
 Bounce writes 32-bit float 48 kHz WAVs: `take1_MixDown.wav` and, with `--stems`, one per
 vocal track. A full song synthesizes in about 2-3 minutes; bounce after the panel shows 100%.
 
+## Record the editor playing (for "project view" videos)
+
+Playback needs an audio device; with none, the playhead doesn't move. Give Wine a silent one:
+`apt-get install -y pulseaudio pulseaudio-utils`, then `pulseaudio -D --exit-idle-time=-1` and
+`pactl load-module module-null-sink sink_name=silent && pactl set-default-sink silent`. SynthV
+then starts without the "No audio device" dialog (so skip `open.sh`'s dialog clicks).
+- For a tall view, set the Wine desktop size before launching (`wine reg add
+  'HKCU\Software\Wine\Explorer\Desktops' /v Default /t REG_SZ /d 1080x1300 /f`, then
+  `wineserver -k`: the `reg` call itself starts the desktop at the old size), start Xvfb at the same
+  size, and double-click the title bar to maximize. Put everything back (1600x900, panels, window
+  size) afterwards: the other scripts' click positions assume the default layout.
+- Let synthesis finish, then record with `ffmpeg -f x11grab -draw_mouse 0 -framerate 30 ... -f pulse
+  -i silent.monitor` while playing from the start (the view pages along with the playhead).
+- Sync to song time by the playhead, not the captured audio: the drawn playhead trails the audio
+  by about 80 ms. Stop a recorder with `pkill -x ffmpeg`; `pkill -f ...ffmpeg...` matches its own shell.
+
 ## What Basic + Teto Lite can and can't do
 
 - Sings Japanese well. **English (cross-lingual) singing needs SynthV Pro**: Basic has no
