@@ -17,7 +17,7 @@ import svp  # noqa: E402
 
 PARTICLES = {"の", "に", "が", "で", "も", "わ", "え", "お", "を", "と", "ね", "よ", "か", "だ", "さ"}
 SMALL = set("ゃゅょぁぃぅぇぉっ")
-TWO_BEFORE = (["かい"], ["む"], ["けん"], ["あし"], ["ま"])  # に before these is the number two
+TWO_BEFORE = {"かい", "む", "けん", "あし", "ま", "あ", "またか"}  # に before these words is the number two
 
 
 def morae(tok):
@@ -41,7 +41,7 @@ def main(path, lyrics_path, *flags):
                 for wi, w in enumerate(words):
                     nxt = words[wi + 1] if wi + 1 < len(words) else []
                     for k, tok in enumerate(w):
-                        number = tok == "に" and nxt[:1] in TWO_BEFORE
+                        number = tok == "に" and "".join(nxt) in TWO_BEFORE
                         info.append((tok, k == 0, k == len(w) - 1, len(w) == 1 and tok in PARTICLES and not number))
                 for i, (n, (tok, start, end, particle)) in enumerate(zip(notes, info)):
                     rows.append(dict(tok=tok, start=start, end=end, particle=particle,
