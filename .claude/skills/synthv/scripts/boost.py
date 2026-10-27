@@ -57,8 +57,12 @@ def boost_track(d, track_index, wav, target):
     # A group can be placed more than once (a repeated chorus); its curve is shared, so measure
     # every placement and boost once by the average.
     offsets = {}
-    for ref in d["tracks"][track_index].get("groups", []):
+    track = d["tracks"][track_index]
+    for ref in track.get("groups", []):
         offsets.setdefault(ref["groupID"], []).append(ref["blickOffset"])
+    if track["mainGroup"]["notes"]:               # notes placed straight on the track, not in a group
+        lib[track["mainGroup"]["uuid"]] = track["mainGroup"]
+        offsets[track["mainGroup"]["uuid"]] = [0]
     for gid, offs in offsets.items():
         g = lib[gid]
         old = g["parameters"]["loudness"]["points"]
