@@ -1,5 +1,6 @@
 #!/bin/bash
-# Install Synthesizer V Studio Basic 1.10.1 and the free Kasane Teto (Lite) voice under Wine,
+# Install Synthesizer V Studio Basic 1.10.1 and the free Kasane Teto (Lite) and Tsurumaki Maki AI
+# (ENG Lite) voices under Wine,
 # for headless use on a virtual X display. Safe to re-run; finished steps are skipped.
 # Env: SYNTHV_PREFIX (Wine prefix, default /root/.wine-synthv), SYNTHV_CACHE (downloads).
 set -euo pipefail
@@ -11,6 +12,9 @@ BASIC_URL="$SITE/Synthesizer%20V%20Studio/Basic/SVSTUDIO_BASIC_1.10.1.exe"
 BASIC_SHA=7ed7a957f57126c05df3c5a8b24806d10c1910bfd8a976f9826cff565122280d
 TETO_URL="$SITE/Singing%20Voice%20Databases/KASANE_TETO/KASANE_TETO_AI_LITE_100.svpk"
 TETO_SHA=5148e37ecef1c745695b896d4f5765ce2b9188cc2dcda414c4f9e533110152bc
+# English voice: Dreamtonics' own free Lite release (Teto Lite only sings Japanese in Basic)
+MAKI_URL="https://resource.dreamtonics.com/download/English/Voice%20Databases/Lite%20Voice%20Databases/Tsurumaki%20Maki/maki-ai-eng-lite-installer-v101.svpk"
+MAKI_SHA=357ad1bf24a13fd85b8c1468ca43af42ca0e1c0b40f66ccef946fc5f0846d2c4
 DXVK_URL="https://github.com/doitsujin/dxvk/releases/download/v2.5.3/dxvk-2.5.3.tar.gz"
 DXVK_SHA=d8e6ef7d1168095165e1f8a98c7d5a4485b080467bb573d2a9ef3e3d79ea1eb8
 
@@ -36,6 +40,7 @@ fi
 
 fetch "$BASIC_URL" SVSTUDIO_BASIC_1.10.1.exe "$BASIC_SHA"
 fetch "$TETO_URL" KASANE_TETO_AI_LITE_100.svpk "$TETO_SHA"
+fetch "$MAKI_URL" maki-ai-eng-lite-installer-v101.svpk "$MAKI_SHA"
 fetch "$DXVK_URL" dxvk-2.5.3.tar.gz "$DXVK_SHA"
 
 if [ ! -d "$PREFIX/drive_c" ]; then
@@ -67,6 +72,12 @@ TETO="$DOCS/databases/Kasane_Teto_(Lite)"
 if [ ! -f "$TETO/voice.nofs" ]; then
   mkdir -p "$TETO"
   7z x -y -o"$TETO" "$CACHE/KASANE_TETO_AI_LITE_100.svpk" voice.nofs license.txt profile.png background.png >/dev/null
+fi
+
+MAKI="$DOCS/databases/Tsurumaki_Maki_AI_(ENG_Lite)"
+if [ ! -f "$MAKI/voice.nofs" ]; then
+  mkdir -p "$MAKI"
+  7z x -y -o"$MAKI" "$CACHE/maki-ai-eng-lite-installer-v101.svpk" voice.nofs license.txt profile.png background.png >/dev/null
 fi
 
 echo "SynthV Basic ready: $APP"

@@ -17,6 +17,8 @@ import svp  # noqa: E402
 VOICES = {
     "Kasane Teto (Lite)": {"name": "Kasane Teto (Lite)", "language": "japanese", "phoneset": "romaji",
                            "backendType": "SVR2AI", "version": "100"},
+    "Tsurumaki Maki AI (ENG Lite)": {"name": "Tsurumaki Maki AI (ENG Lite)", "language": "english",
+                                     "phoneset": "arpabet", "backendType": "SVR2AI", "version": "101"},
 }
 
 

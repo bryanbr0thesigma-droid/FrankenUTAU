@@ -1,6 +1,6 @@
 ---
 name: synthv
-description: Run Synthesizer V Studio Basic (with the free Kasane Teto Lite voice) headless in this Linux container to render vocals from .svp projects, translate/fit Japanese lyrics to a song, even out vocal levels, and mix with an instrumental. Use when the user asks to run SynthV, render or edit a SynthV/.svp project, make Teto sing, or work on their songs in songs/.
+description: Run Synthesizer V Studio Basic (with the free Kasane Teto Lite and Tsurumaki Maki ENG Lite voices) headless in this Linux container to render vocals from .svp projects, map a song's vocal from audio into a new .svp (UVR separation, pitch tracking, lyric alignment, tuning), translate/fit Japanese lyrics to a song, even out vocal levels, and mix with an instrumental. Use when the user asks to run SynthV, render or edit a SynthV/.svp project, make Teto or Maki sing, recreate a song in SynthV from an mp3, or work on their songs in songs/.
 ---
 
 # Synthesizer V in this container
@@ -16,7 +16,8 @@ bash .claude/skills/synthv/scripts/install.sh
 ```
 
 Installs Wine and tools, downloads (checksum-pinned) the Basic installer and Teto Lite from the
-user's site synthv.me plus DXVK 2.5.3 from GitHub, and sets up the prefix `/root/.wine-synthv`.
+user's site synthv.me, Maki ENG Lite from Dreamtonics' download server, plus DXVK 2.5.3 from GitHub,
+and sets up the prefix `/root/.wine-synthv`.
 Takes a few minutes. Containers get reset, so re-run it in a new session.
 
 Why the odd parts:
@@ -69,9 +70,42 @@ then starts without the "No audio device" dialog (so skip `open.sh`'s dialog cli
 - Sync to song time by the playhead, not the captured audio: the drawn playhead trails the audio
   by about 80 ms. Stop a recorder with `pkill -x ffmpeg`; `pkill -f ...ffmpeg...` matches its own shell.
 
+## Map a song from audio (recreate its vocal as a new .svp)
+
+Scripts in `scripts/transcribe/`, run with their own venv (`setup.sh`, about 1.6 GB; `T=scripts/transcribe`,
+`PY=~/.venvs/transcribe/bin/python`). Ask the user for the lyrics; aligning known words beats guessing them.
+
+1. `$T/separate.sh ~/.venvs/transcribe song.mp3 sep/` - UVR models: instrumental, lead, backing (~35 min on CPU).
+2. `$PY -I $T/tempo.py sep/song.wav grid.npy` - tempo and beat grid. Find beat 1 yourself (e.g. the
+   first big hit after a riser) and choose `--origin-beat` for step 6 so bar lines match.
+3. `$PY -I $T/f0.py sep/lead.wav f0.npz`, then `$T/f0fix.py sep/lead.wav f0.npz f0_fix.npz` (CREPE
+   reads high passages an octave low; the fix tests harmonics) and `$T/novelty.py sep/lead.wav nov.npy`.
+4. `TORCH_HOME=... $PY -I $T/align.py sep/lead.wav lyrics.txt align.json` - word and letter times.
+5. `$PY -I $T/transcribe.py f0_fix.npz align.json grid.npy notes.json nov.npy` - notes with lyrics.
+6. `$PY -I $T/make_svp.py notes.json raw.svp --voice maki-eng --origin-beat 28`, render it, then tune:
+   `$T/dyn_match.py raw.svp raw_render.wav sep/lead.wav LEAD dyn.svp` and (after `f0.py` on the
+   render) `$T/pitch_match.py dyn.svp render_f0.npz f0_fix.npz LEAD tuned.svp`; render again. LEAD is
+   where the original vocal starts in the project (printed by make_svp, plus any measured lag).
+7. Check before sending: `roll.py`/`spec.py` (piano roll and spectrogram pictures), `compare.py`
+   (pitch vs original), `dropouts.py` (where the original sings and the render is silent).
+
+What the user heard and what fixed it (all now in `transcribe.py`):
+- Voice cutting out mid-phrase: notes ended where pitch stopped, before the sound did. Hold each note
+  to the next unless the original really rests; never leave a gap before a "+" or "-" note (SynthV
+  leaves it silent).
+- Words slammed together: detected starts include the consonant, about 40 ms before SynthV's note
+  start (the vowel); shift that out before snapping to the grid.
+- Fumbled chorus: fully legato notes on one pitch smear repeated words ("more, more, more"). Put a
+  32nd break before a word where the original dips 12 dB for 50 ms, but only after soft endings
+  (vowel, r, l, m, n); a hard final consonant separates itself, and an early end lets it eat the vowel.
+- "Sounds like UTAU": untuned. `pitch_match.py` and `dyn_match.py` copy the original's pitch and
+  loudness movement (measured against a render, since SynthV adds its own pitch on top).
+
 ## What Basic + Teto Lite can and can't do
 
-- Sings Japanese well. **English (cross-lingual) singing needs SynthV Pro**: Basic has no
+- For English, use **Tsurumaki Maki AI (ENG Lite)**: an English voice sings English natively in Basic
+  (Lite voices from AHS may not allow commercial use; check AHS's terms before release).
+- Teto sings Japanese well. **English (cross-lingual) singing needs SynthV Pro**: Basic has no
   language selector and ignores a track's `languageOverride`, so English lyrics come out as
   Japanese sounds. A **per-note** override (e.g. Mandarin lines, `phonesetOverride: xsampa`)
   renders as silence; `apply_lyrics.py` clears them. Basic also has no Rap mode (rap notes are
