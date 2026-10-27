@@ -100,6 +100,9 @@ What the user heard and what fixed it (all now in `transcribe.py`):
   (vowel, r, l, m, n); a hard final consonant separates itself, and an early end lets it eat the vowel.
 - "Sounds like UTAU": untuned. `pitch_match.py` and `dyn_match.py` copy the original's pitch and
   loudness movement (measured against a render, since SynthV adds its own pitch on top).
+- New lyrics on the mapped melody (e.g. a Japanese version): copy the pitch only. The original's level
+  dips at its own consonants, which land on the new vowels; copying it made Teto sound like she was
+  leaning away from and back to the mic. Even levels with `boost.py` (whole notes, never cuts) instead.
 
 ## What Basic + Teto Lite can and can't do
 
