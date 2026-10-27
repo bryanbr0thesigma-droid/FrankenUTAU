@@ -26,12 +26,12 @@ R, O = env(render, 0), env(orig, lead)
 n = min(len(R), len(O)); R, O = R[:n], O[:n]
 d = svp.load(src)
 bpm = d["time"]["tempo"][0]["bpm"]; spb = 60 / bpm
-g = d["tracks"][0]["mainGroup"]
+g, boff = svp.notes_group(d)
 notes = sorted(g["notes"], key=lambda x: x["onset"])
 inside = np.zeros(n, bool)
 spans = []
 for x in notes:
-    a = int(x["onset"] / svp.Q * spb * 100); b = min(n, int((x["onset"] + x["duration"]) / svp.Q * spb * 100))
+    a = int((x["onset"] + boff) / svp.Q * spb * 100); b = min(n, int((x["onset"] + boff + x["duration"]) / svp.Q * spb * 100))
     inside[a:b] = True; spans.append((a, b))
 loud = inside & (R > np.percentile(R[inside], 95) - 30) & (O > np.percentile(O[inside], 95) - 30)
 corr = np.full(n, np.nan)
@@ -51,7 +51,7 @@ sm = np.clip(sm, -LIMIT, LIMIT)
 pts = []
 for a, b in spans:
     for i in list(range(a, b, 3)) + [b - 1]:
-        pts.append((int(round(i / 100 / spb * svp.Q)), round(float(sm[i]), 2)))
+        pts.append((int(round(i / 100 / spb * svp.Q)) - boff, round(float(sm[i]), 2)))
 pts = sorted(set(pts))
 g["parameters"]["loudness"] = {"mode": "cubic", "points": [v for p in pts for v in p]}
 svp.save(d, out)

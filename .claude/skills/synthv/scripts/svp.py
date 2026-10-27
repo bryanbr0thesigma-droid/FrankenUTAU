@@ -32,6 +32,16 @@ def group_phrases(group):
     return split_phrases(sorted(group["notes"], key=lambda n: n["onset"]))
 
 
+def notes_group(d, track=0):
+    """The group holding a track's notes and its blick offset: the track's own notes if it has any,
+    else its first placed note group."""
+    t = d["tracks"][track]
+    if t["mainGroup"]["notes"] or not t.get("groups"):
+        return t["mainGroup"], 0
+    ref = t["groups"][0]
+    return next(g for g in d["library"] if g["uuid"] == ref["groupID"]), ref["blickOffset"]
+
+
 def load_lyrics(path):
     """Import a lyrics module (a .py file defining GROUPS) by path."""
     spec = importlib.util.spec_from_file_location("lyrics_module", path)

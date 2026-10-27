@@ -30,11 +30,11 @@ delta[np.abs(delta) > MAX_CENTS] = np.nan
 
 d = svp.load(src)
 spb = 60 / d["time"]["tempo"][0]["bpm"]
-g = d["tracks"][0]["mainGroup"]
+g, boff = svp.notes_group(d)
 pts = []
 covered = 0
 for x in sorted(g["notes"], key=lambda x: x["onset"]):
-    a = int(x["onset"] / svp.Q * spb * 100); b = min(n, int((x["onset"] + x["duration"]) / svp.Q * spb * 100))
+    a = int((x["onset"] + boff) / svp.Q * spb * 100); b = min(n, int((x["onset"] + boff + x["duration"]) / svp.Q * spb * 100))
     if b - a < 2: continue
     seg = delta[a:b]
     ok = ~np.isnan(seg)
@@ -46,7 +46,7 @@ for x in sorted(g["notes"], key=lambda x: x["onset"]):
     seg = np.array([np.median(seg[max(0, i - 2):i + 3]) for i in idx])          # 50 ms median
     seg = np.convolve(np.pad(seg, 1, mode="edge"), np.ones(3) / 3, mode="valid")  # 30 ms mean
     for i in list(range(0, b - a, 2)) + [b - a - 1]:
-        pts.append((int(round((a + i) / 100 / spb * svp.Q)), round(float(seg[i]), 1)))
+        pts.append((int(round((a + i) / 100 / spb * svp.Q)) - boff, round(float(seg[i]), 1)))
 pts = sorted(set(pts))
 g["parameters"]["pitchDelta"] = {"mode": "cubic", "points": [v for p in pts for v in p]}
 svp.save(d, out)

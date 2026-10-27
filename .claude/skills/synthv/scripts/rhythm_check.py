@@ -1,7 +1,7 @@
 """Check how Japanese lyrics sit on the beat.
 
 Usage: python3 -I rhythm_check.py <project.svp> <lyrics.py> [--list]
-Over sung notes (not breaths or "ら"):
+Over sung notes (not breaths, "ら" or "-" slurs):
   strict     beats where a word starts
   good       beats where a word starts, a word began on the note just before (a pickup),
              or a held word ending (an eighth or longer) lands
@@ -75,7 +75,7 @@ def main(path, lyrics_path, *flags):
                                      prev_start=i > 0 and info[i - 1][1] and not info[i - 1][3],
                                      beat=(ref["blickOffset"] + n["onset"]) / svp.Q, dur16=n["duration"] / (svp.Q / 4),
                                      secs=n["duration"] / svp.Q * 60 / bpm, phrase=phrase[1]))
-    sung = [r for r in rows if r["tok"] not in ("br", "ら")]
+    sung = [r for r in rows if r["tok"] not in ("br", "ら", "-")]
     on_beat = [r for r in sung if abs(r["beat"] % 1) < 0.01]
     strong = [r for r in on_beat if abs(r["beat"] % 2) < 0.01]
 

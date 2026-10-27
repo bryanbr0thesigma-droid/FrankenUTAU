@@ -1,11 +1,12 @@
 """Write transcribed notes (transcribe.py output) into a new SynthV project.
 
-Usage: python -I make_svp.py notes.json out.svp [--voice maki-eng|teto] [--origin-beat 28]
+Usage: python -I make_svp.py notes.json out.svp [--voice maki-eng|teto] [--origin-beat 28] [--group NAME]
 --origin-beat is the project beat where the grid's first beat (grid.npy) lands; pick it so bar
 lines match the song (a multiple of 4 when the grid's first beat is a downbeat) and leave room
 for a pickup. The instrumental then starts at the printed offset into the project.
 English lyrics are written as SynthV expects: the word on its first note, "+" on each further
-syllable, "-" on a slur.
+syllable, "-" on a slur. --group puts the notes in a note group (placed at the start of the
+track) instead of on the track itself, which apply_lyrics.py, beat_cells.py and rhythm_check.py need.
 """
 import argparse
 import json
@@ -60,6 +61,7 @@ def main():
     ap.add_argument("notes"); ap.add_argument("out")
     ap.add_argument("--voice", default="maki-eng", choices=sorted(VOICES))
     ap.add_argument("--origin-beat", type=float, default=28)
+    ap.add_argument("--group")
     a = ap.parse_args()
     N = json.load(open(a.notes))
     off, per = N["off"], N["per"]
@@ -72,7 +74,20 @@ def main():
                       "duration": int(round((n["b1"] - n["b0"]) * svp.Q)),
                       "lyrics": lyr, "phonemes": PHONEMES.get(lyr, ""), "accent": "",
                       "pitch": int(n["pitch"]), "detune": 0, "attributes": {}, "takes": take()})
-    d["tracks"][0]["mainGroup"]["notes"] = notes
+    t = d["tracks"][0]
+    if a.group:
+        gid = str(uuid.uuid4())
+        d["library"].append({"name": a.group, "uuid": gid, "vocalModes": {}, "pitchControls": [], "notes": notes,
+                             "parameters": {p: {"mode": "cubic", "points": []} for p in PARAMS}})
+        t["groups"].append({"uuid": str(uuid.uuid4()), "groupID": gid, "blickAbsoluteBegin": 0, "blickAbsoluteEnd": -1,
+                            "blickOffset": 0, "pitchOffset": 0, "mute": False, "isInstrumental": False,
+                            "database": {"name": "", "language": "", "phoneset": "", "languageOverride": "",
+                                         "phonesetOverride": "", "backendType": "", "version": "-2"},
+                            "dictionary": "", "voice": {"vocalModeInherited": True, "vocalModePreset": "",
+                                                        "vocalModeParams": {}},
+                            "voicePresetName": "", "takes": take()})
+    else:
+        t["mainGroup"]["notes"] = notes
     svp.save(d, a.out)
     print(f"{len(notes)} notes at {60 / per:.1f} BPM; start the instrumental {a.origin_beat * per - off:.4f} s into the project")
 
