@@ -1,10 +1,12 @@
 """Even out vocal levels by raising SynthV's Loudness curve on notes that render quiet.
 
-Usage: python3 -I boost.py <in.svp> <out.svp> <track-index>:<track-stem.wav>:<target-dB> [...]
+Usage: python3 -I boost.py <in.svp> <out.svp> <track-index>:<track-stem.wav>:<target-dB>[:<max-dB>] [...]
 Measures each note's level in that track's rendered stem, then writes a group Loudness curve
 point at each note: boost = target - level, median-smoothed over neighbouring notes, clamped
-to 0..12 dB (SynthV's maximum). Existing curve values are added to, so it can be run again on a
-re-render. Breaths ("br") are not measured. Typical targets: -19.5 for a lead, -20.5 for backing.
+to 0..max dB (default 12, SynthV's maximum). Existing curve values are added to, so it can be run
+again on a re-render. Breaths ("br") are not measured. Typical targets: -19.5 for a lead, -20.5 for
+backing. Much above +6 dB SynthV pushes the voice and it sounds strained, and breathy syllables
+(ひ, ふ, s-sounds) measure quiet without being weak: cap at 4-6 dB when that shows up.
 """
 import math
 import os
@@ -50,7 +52,7 @@ def note_db(audio, blick_offset, n, bpm):
     return 20 * math.log10(max(rms, 1e-9))
 
 
-def boost_track(d, track_index, wav, target):
+def boost_track(d, track_index, wav, target, max_db=MAX_DB):
     bpm = d["time"]["tempo"][0]["bpm"]
     audio = mono(wav)
     lib = {g["uuid"]: g for g in d["library"]}
@@ -77,7 +79,7 @@ def boost_track(d, track_index, wav, target):
             for i, n in enumerate(notes):
                 window = [b for b in raw[max(0, i - 2):i + 3] if b is not None]
                 extra = statistics.median(window) if window else 0.0
-                pts += [n["onset"], round(min(MAX_DB, max(0.0, curve_value(old, n["onset"]) + extra)), 2)]
+                pts += [n["onset"], round(min(max_db, max(0.0, curve_value(old, n["onset"]) + extra)), 2)]
             pts += [notes[-1]["onset"] + notes[-1]["duration"], pts[-1]]
         g["parameters"]["loudness"] = {"mode": "cubic", "points": pts}
         vals = pts[1::2]
@@ -92,8 +94,12 @@ def main(src, dst, *specs):
     d = svp.load(src)
     for spec in specs:
         ti, rest = spec.split(":", 1)
-        wav, target = rest.rsplit(":", 1)
-        boost_track(d, int(ti), wav, float(target))
+        parts = rest.rsplit(":", 2)
+        if len(parts) == 3:
+            boost_track(d, int(ti), parts[0], float(parts[1]), float(parts[2]))
+        else:
+            wav, target = rest.rsplit(":", 1)
+            boost_track(d, int(ti), wav, float(target))
     svp.save(d, dst)
 
 

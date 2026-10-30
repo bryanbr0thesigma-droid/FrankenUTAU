@@ -103,6 +103,10 @@ What the user heard and what fixed it (all now in `transcribe.py`):
 - New lyrics on the mapped melody (e.g. a Japanese version): copy the pitch only. The original's level
   dips at its own consonants, which land on the new vowels; copying it made Teto sound like she was
   leaning away from and back to the mic. Even levels with `boost.py` (whole notes, never cuts) instead.
+- "Sounds strained" (the 1-2-3-4 count, starts of lines): boosts of 8-12 dB push SynthV's voice, and
+  breathy syllables (ひ, ふ) measure quiet without being weak. Cap boosts (`0:stem.wav:-19:4`) and lift
+  quiet passages in the mix (`mix.py --ride`) instead; run `pitch_match.py --ease-ms 150
+  --attack-cents 60` so the original's scoops don't bend the new words' attacks.
 
 ## What Basic + Teto Lite can and can't do
 
