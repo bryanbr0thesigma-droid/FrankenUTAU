@@ -4,7 +4,8 @@ Usage: python -I map_ja.py vocal.wav f0.npz grid.npy lyrics.py out_dir [--tracks
                            [--force-f0 corrupt=280]
 
 lyrics.py holds LINES = [(singer, "kana line"), ...] in sung order (kana.py splits each line into
-morae, like typing a whole line in SynthV). f0.npz comes from synthv/scripts/transcribe/f0.py,
+morae, like typing a whole line in SynthV). Singer "B" = every singer; a word written "*word" is
+sung by every singer while the rest of the line keeps its singer. f0.npz comes from synthv/scripts/transcribe/f0.py,
 grid.npy from tempo.py. Writes out_dir/align.json, out_dir/project.json (for render.py) and
 prints each line with its timing.
 
@@ -29,6 +30,15 @@ STEP = 0.25                 # grid step in beats (sixteenths)
 REST_DB = 25                # a dip this far below the phrase level...
 REST_MIN = 0.12             # ...for this long (s) ends a note early
 MAX_DEV = 2.5               # original pitch further than this from the note (semitones) is ignored
+
+
+def line_morae(text):
+    """Morae of a lyric line with a flag for words marked "*" (sung by every singer)."""
+    out = []
+    for w in text.split():
+        both = w.startswith("*")
+        out += [(m, both) for m in kana.moras(w.lstrip("*"))]
+    return out
 
 
 def load_lines(path):
@@ -64,7 +74,7 @@ def align(wav, lines):
     tokens, owner = [], []
     for li, (_, text) in enumerate(lines):
         tokens.append(D["*"]); owner.append(-1)
-        for k, m in enumerate(kana.moras(text)):
+        for k, (m, _both) in enumerate(line_morae(text)):
             morae.append((li, k, m))
             r = kana.roma(m)
             if r == "cl":
@@ -188,11 +198,14 @@ def main():
         name, bank = rest.split(":", 1)
         tracks[who] = dict(name=name, voicebank=bank, notes=[])
     forced = dict(s.split("=") for s in filter(None, a.force_f0.split(",")))
+    flags = {li: line_morae(text) for li, (_, text) in enumerate(lines)}
     for m in sung:
         who = lines[m["line"]][0]
-        tr = tracks.setdefault(who, dict(name=who, voicebank="", notes=[]))
-        tr["notes"].append(dict(t0=round(m["t0"], 4), t1=round(m["t1"], 4), midi=m["midi"], lyric=m["mora"],
-                                line=m["line"]))
+        both = who == "B" or flags[m["line"]][m["k"]][1]
+        for w in (list(tracks) if both else [who]):
+            tr = tracks.setdefault(w, dict(name=w, voicebank="", notes=[]))
+            tr["notes"].append(dict(t0=round(m["t0"], 4), t1=round(m["t1"], 4), midi=m["midi"], lyric=m["mora"],
+                                    line=m["line"]))
     # original pitch curve, only where it is close to a note being sung
     curve = np.full(len(t), np.nan)
     for m in sung:

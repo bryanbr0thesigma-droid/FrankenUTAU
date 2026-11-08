@@ -72,8 +72,12 @@ def _timemap(t, cons_in, cons_out, vow_in):
     return cons_in + (vow_in - w if w < span else a + (w - span))
 
 
-def resample(x, sr, offset_ms, consonant_ms, cutoff_ms, out_len, f0_out, vel=100, cache=None, force_f0=None):
-    """Render one note: see module docstring. cache: dict to reuse pitch marks per sample."""
+def resample(x, sr, offset_ms, consonant_ms, cutoff_ms, out_len, f0_out, vel=100, cache=None, force_f0=None,
+             smooth=0):
+    """Render one note: see module docstring. cache: dict to reuse pitch marks per sample.
+    smooth=k averages each voiced grain with its k neighbouring periods on each side (each centred
+    on its own pitch mark): the periodic part adds up and noise averages out, so a hissy, rough
+    bank holds a steadier tone. 0 = off."""
     start = int(offset_ms * sr / 1000)
     end = len(x) - int(cutoff_ms * sr / 1000) if cutoff_ms >= 0 else start + int(-cutoff_ms * sr / 1000)
     end = max(min(end, len(x)), start + int(0.02 * sr))
@@ -107,6 +111,18 @@ def resample(x, sr, offset_ms, consonant_ms, cutoff_ms, out_len, f0_out, vel=100
             Pout, gain = P, 1.0
         a, b = m - P, m + P + 1
         g = x[max(a, 0):min(b, len(x))]
+        if smooth and v and a >= 0 and b <= len(x):
+            acc, wsum = np.zeros(b - a), 0.0
+            for j in range(-smooth, smooth + 1):
+                kk = k + j
+                if 0 <= kk < len(marks) and voiced[kk]:
+                    mj = int(marks[kk])
+                    if mj - P >= start and mj + P + 1 <= end:
+                        wj = 1.0 - abs(j) / (smooth + 1)
+                        acc += wj * x[mj - P:mj + P + 1]
+                        wsum += wj
+            if wsum > 0:
+                g = acc / wsum
         w = np.hanning(2 * P + 3)[1:-1][max(0, -a):max(0, -a) + len(g)]
         c = int(round(t)) + pad - (m - max(a, 0))
         if c < 0:

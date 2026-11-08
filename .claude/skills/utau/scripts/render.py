@@ -32,6 +32,8 @@ PORTA = 0.035            # pitch glide half-width between legato notes (s)
 TAIL = 0.03              # fade after a phrase's last note (s)
 NORM_DB = -16.0          # per-note loudness target (vowel part)
 NORM_MAX = 12.0          # largest correction (dB)
+NASAL_DB = -3.0          # ん sits a little under the vowels, as sung
+LOW_CUT = 70.0           # high-pass on every sample (Hz)
 
 
 def load_wav(path, cache):
@@ -41,6 +43,10 @@ def load_wav(path, cache):
         if sr != SR:
             import librosa
             x = librosa.resample(x, orig_sr=sr, target_sr=SR)
+        # low cut: some banks carry DC offset or sub-bass thumps that are barely audible but eat
+        # the headroom, so a limiter later ducks the whole voice after them
+        from scipy.signal import butter, sosfiltfilt
+        x = sosfiltfilt(butter(4, LOW_CUT, "highpass", fs=SR, output="sos"), x)
         cache[path] = x
     return cache[path]
 
@@ -147,21 +153,33 @@ def render_track(tr, t_from=None, t_to=None):
         f0 = 440.0 * 2 ** ((midi - 69) / 12)
         x = load_wav(e.wav, wavs)
         seg = psola.resample(x, SR, e.offset, e.consonant, e.cutoff, out_len, f0,
-                             vel=r.get("vel", 100), cache=marks, force_f0=tr.get("force_f0"))
-        # per-note loudness: even out the vowel level across samples
-        vstart = int(min(r["pre"] + 0.02, out_len / 2 / SR) * SR)
-        body = seg[vstart:]
+                             vel=r.get("vel", 100), cache=marks, force_f0=tr.get("force_f0"),
+                             smooth=tr.get("smooth", 0))
+        # per-note loudness: even out the vowel's perceived (K-weighted) level across samples,
+        # so dark samples such as ん aren't left sounding much quieter than bright ones
+        vs = 2 ** ((100 - r.get("vel", 100)) / 100)
+        cons = e.consonant * vs / 1000                   # the sample's fixed (consonant) part
+        vstart = int(min(max(r["pre"], cons) + 0.02, out_len / 2 / SR) * SR)
+        kw = kweight(seg)
+        body = kw[vstart:]
         if len(body) > SR // 50:
-            rms = np.sqrt(np.mean(body ** 2)) + 1e-9
-            g = np.clip(NORM_DB - 20 * np.log10(rms), -NORM_MAX, NORM_MAX)
+            lvl = 20 * np.log10(np.sqrt(np.mean(body ** 2)) + 1e-9)
+            target = NORM_DB + (NASAL_DB if r["mora"] == "ん" else 0.0)
+            g = np.clip(target - lvl, -NORM_MAX, NORM_MAX)
             seg = seg * 10 ** (g / 20)
-            # keep consonant bursts (glitchy banks have very loud ones) within 6 dB of the vowel
-            ceil = NORM_DB + 6
+            kw = kw * 10 ** (g / 20)
+            # keep bursts (glitchy banks have very loud ones) within 6 dB of the vowel, anywhere
+            ceil = target + 6
             fr = int(0.01 * SR)
-            for k in range(0, min(vstart + fr, len(seg)) - fr + 1, fr // 2):
-                lv = 20 * np.log10(np.sqrt(np.mean(seg[k:k + fr] ** 2)) + 1e-9)
-                if lv > ceil:
-                    seg[k:k + fr] *= np.hanning(fr) * (10 ** ((ceil - lv) / 20) - 1) + 1
+            # a smooth gain curve (10 ms frames, 5 ms apart) from the louder of the K-weighted
+            # and plain level, so neither bright clicks nor dull thumps get through
+            ks = np.arange(0, max(len(seg) - fr, 1), fr // 2)
+            lv = np.array([max(np.mean(kw[k:k + fr] ** 2), np.mean(seg[k:k + fr] ** 2)) for k in ks])
+            lv = 10 * np.log10(lv + 1e-18)
+            gk = np.minimum(1.0, 10 ** ((ceil - lv) / 20))
+            if gk.min() < 1.0:
+                gk = np.minimum(gk, np.minimum(np.r_[gk[1:], 1.0], np.r_[1.0, gk[:-1]]))  # widen
+                seg = seg * np.interp(np.arange(len(seg)), ks + fr // 2, gk)
         seg = seg * r.get("vol", 100) / 100
         # envelopes: fade in over this note's overlap when legato, fade out under the next note
         fin = int(max(r["ovl"], 0.005) * SR) if r["legato"] else int(0.004 * SR)
@@ -174,7 +192,49 @@ def render_track(tr, t_from=None, t_to=None):
         a = int((start + lead) * SR)
         y[a:a + out_len] += (seg * env)[:len(y) - a]
     y = y[int(lead * SR):] * 10 ** (tr.get("gain_db", 0) / 20)
+    if tr.get("eq"):
+        y = equalize(y, tr["eq"])
     return y
+
+
+def _biquad(kind, fc, q, gain_db=0.0):
+    """RBJ cookbook biquad as a scipy sos row."""
+    A = 10 ** (gain_db / 40)
+    w = 2 * np.pi * fc / SR
+    al = np.sin(w) / (2 * q)
+    c = np.cos(w)
+    if kind == "peak":
+        b = [1 + al * A, -2 * c, 1 - al * A]; a = [1 + al / A, -2 * c, 1 - al / A]
+    elif kind == "lowpass":
+        b = [(1 - c) / 2, 1 - c, (1 - c) / 2]; a = [1 + al, -2 * c, 1 - al]
+    elif kind == "highpass":
+        b = [(1 + c) / 2, -(1 + c), (1 + c) / 2]; a = [1 + al, -2 * c, 1 - al]
+    elif kind == "highshelf":
+        sq = 2 * np.sqrt(A) * al
+        b = [A * ((A + 1) + (A - 1) * c + sq), -2 * A * ((A - 1) + (A + 1) * c), A * ((A + 1) + (A - 1) * c - sq)]
+        a = [(A + 1) - (A - 1) * c + sq, 2 * ((A - 1) - (A + 1) * c), (A + 1) - (A - 1) * c - sq]
+    b, a = np.array(b) / a[0], np.array(a) / a[0]
+    return np.concatenate([b, a])
+
+
+K_SOS = np.array([_biquad("highshelf", 1500, 0.707, 4.0), _biquad("highpass", 38, 0.5)])
+
+
+def kweight(x):
+    """ITU-R BS.1770 K-weighting (the loudness meters' ear curve)."""
+    from scipy.signal import sosfilt
+    return sosfilt(K_SOS, x)
+
+
+def equalize(y, eq):
+    """eq = {"lowpass": Hz, "peaks": [[Hz, dB, Q], ...]} applied to a whole track."""
+    from scipy.signal import sosfiltfilt
+    rows = [_biquad("peak", f, q, g) for f, g, q in eq.get("peaks", [])]
+    if eq.get("lowpass"):
+        rows.append(_biquad("lowpass", eq["lowpass"], 0.707))
+    if eq.get("highpass"):
+        rows.append(_biquad("highpass", eq["highpass"], 0.707))
+    return sosfiltfilt(np.array(rows), y) if rows else y
 
 
 def main():
