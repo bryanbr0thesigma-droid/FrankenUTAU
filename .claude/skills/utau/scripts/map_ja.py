@@ -157,6 +157,9 @@ def main():
             while k < len(t) - 1 and voiced[k] and t[k] - m["t0"] < 3.0:
                 k += 1
             end = off + max(round((t[k] - off) / step), m["slot"] + 1) * step
+            later = [s["t0"] for s in sung[i + 1:i + 2]]
+            if later and later[0] > m["t0"]:
+                end = min(end, later[0])          # the next line's first note (either singer)
         # a real rest inside the note ends it early
         a0, a1 = fi(m["t0"]), fi(end)
         if a1 > a0 + 3:
