@@ -1,0 +1,16 @@
+Google Drive links shared in this session
+==========================================
+
+1) signaling-rei-corrupt.zip  (76 MB)
+   https://drive.google.com/file/d/1ZnKx20FyqFpyv0ZyiWz5rC-4KBZiruvB/view?usp=sharing
+   UTAU cover of "次元通信 (Signaling)" (AnythingBecomeMoe) with Adachi Rei and Corrupt-Chan:
+   - signaling-adachi-rei-vocal.wav      Adachi Rei vocal stem
+   - signaling-corrupt-chan-vocal.wav    Corrupt-Chan vocal stem
+   - signaling-rei-corrupt-FULL-MIX.wav  full mix
+   - corrupt-chan-3d/                    Corrupt-Chan 3D fan build (two VRM models, cc_build.js, README)
+   Stored in this repo as signaling-rei-corrupt.zip.
+
+2) [MV] ABM - '次元通信' (Signaling) 初音ミク & 重音テト - AnythingBecomeMoe (720p).mp4  (22 MB)
+   https://drive.google.com/file/d/1o6pU_GJdSRE1ba12XcAqkowbX3IV4Is7/view?usp=sharing
+   The official music video for "次元通信 (Signaling)" by AnythingBecomeMoe, featuring Hatsune Miku
+   and Kasane Teto. Not stored in this repo.
