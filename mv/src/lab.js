@@ -1,0 +1,89 @@
+// Debug harness: loads both performers, cel-shades them and renders test views (see lab.mjs).
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { buildCorruptChan } from "../assets/signaling/corrupt-chan-3d/cc_build.js";
+import { buildRei } from "./rei.js";
+import { celShade, addOutlines, outlineUniforms } from "./toon.js";
+import { mulberry32 } from "./util.js";
+import { POSES, applyPose } from "./re/poses.js";
+Math.random = mulberry32(7);
+
+export async function createLab({ width = 1280, height = 720 } = {}) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(width, height);
+  document.body.appendChild(renderer.domElement);
+  const libs = { THREE, GLTFLoader, VRMLoaderPlugin, VRMUtils };
+  const CC = "./assets/signaling/corrupt-chan-3d/";
+  const [rei, cc] = await Promise.all([
+    buildRei(libs, "./assets/rei/adachi_rei_v1.0.0.vrm"),
+    buildCorruptChan(libs, { body: CC + "corrupt_chan_body.vrm", hair: CC + "corrupt_chan_hair.vrm" }),
+  ]);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1d1640);
+  const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-2.6, 2.0, 1.6); scene.add(key);
+  const amb = new THREE.AmbientLight(0xffffff, 0.75); scene.add(amb);
+  scene.add(rei.root, cc.root);
+  rei.root.position.x = -0.45; cc.root.position.x = 0.45;
+  for (const b of [rei, cc]) b.root.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+  const cam = new THREE.PerspectiveCamera(30, width / height, 0.05, 50);
+  let toonOn = false;
+  function toon() {
+    if (toonOn) return; toonOn = true;
+    celShade(rei.root); celShade(cc.root);
+    addOutlines(rei.root); addOutlines(cc.root);
+  }
+  function settle() { for (let i = 0; i < 60; i++) { rei.update(1 / 30, i / 30); cc.update(1 / 30, i / 30, { glitch: false }); } }
+  settle();
+  function view(name) {
+    if (name === "full") { cam.fov = 30; cam.position.set(0, 0.85, 4.2); cam.lookAt(0, 0.82, 0); outlineUniforms.uOutlinePx.value = 1.8; }
+    if (name === "faces") { cam.fov = 20; cam.position.set(0, 1.38, 1.9); cam.lookAt(0, 1.33, 0); outlineUniforms.uOutlinePx.value = 2.6; }
+    if (name === "back") { cam.fov = 30; cam.position.set(0, 0.85, -4.2); cam.lookAt(0, 0.82, 0); outlineUniforms.uOutlinePx.value = 1.8; }
+    cam.updateProjectionMatrix();
+    renderer.render(scene, cam);
+    return renderer.domElement.toDataURL("image/png");
+  }
+  // both performers in one key pose, seen from angle (degrees, 0 = front)
+  function pose(name, angle = 0, dist = 4.2, y = 0.75) {
+    toon();
+    for (const b of [rei, cc]) applyPose(b.vrm, POSES[name]);
+    for (let i = 0; i < 40; i++) { rei.update(1 / 30); cc.update(1 / 30, i / 30, { glitch: false }); }
+    const a = (angle * Math.PI) / 180;
+    cam.fov = 30; cam.position.set(Math.sin(a) * dist, y + 0.1, Math.cos(a) * dist); cam.lookAt(0, y, 0); cam.updateProjectionMatrix();
+    outlineUniforms.uOutlinePx.value = 1.6;
+    renderer.render(scene, cam);
+    return renderer.domElement.toDataURL("image/png");
+  }
+  // close-up of both faces wearing an expression (names as three-vrm registers them)
+  function expr(spec) {
+    toon();
+    for (const b of [rei, cc]) {
+      applyPose(b.vrm, POSES.stand);
+      const em = b.vrm.expressionManager;
+      for (const e of em.expressions) em.setValue(e.expressionName, 0);
+      for (const part of spec.split("+")) { const [n, v] = part.split("="); if (em.getExpression(n)) em.setValue(n, v ? +v : 1); }
+    }
+    for (let i = 0; i < 30; i++) { rei.update(1 / 30); cc.update(1 / 30, i / 30, { glitch: false }); }
+    // each face in its own half, camera on the head bone
+    renderer.setScissorTest(true);
+    [[rei, 0], [cc, 1]].forEach(([b, k]) => {
+      const hp = b.vrm.humanoid.getRawBoneNode("head").getWorldPosition(new THREE.Vector3());
+      cam.fov = 18; cam.aspect = (width / 2) / height; cam.position.set(hp.x, hp.y + 0.06, hp.z + 0.95); cam.lookAt(hp.x, hp.y + 0.05, hp.z); cam.updateProjectionMatrix();
+      renderer.setViewport(k * width / 2, 0, width / 2, height); renderer.setScissor(k * width / 2, 0, width / 2, height);
+      outlineUniforms.uRes.value.set(width / 2, height); outlineUniforms.uOutlinePx.value = 2.6;
+      renderer.render(scene, cam);
+    });
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, width, height); cam.aspect = width / height;
+    return renderer.domElement.toDataURL("image/png");
+  }
+  function exprNames() { return { rei: rei.vrm.expressionManager.expressions.map((e) => e.expressionName), cc: cc.vrm.expressionManager.expressions.map((e) => e.expressionName) }; }
+  function bones() {
+    const out = {};
+    for (const [k, b] of Object.entries({ rei, cc })) {
+      const H = b.vrm.humanoid, w = (n) => H.getRawBoneNode(n)?.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3));
+      out[k] = { hips: w("hips"), head: w("head"), lFoot: w("leftFoot"), lHand: w("leftHand"), lUpLeg: w("leftUpperLeg"), lKnee: w("leftLowerLeg") };
+    }
+    return out;
+  }
+  return { view, toon, pose, expr, exprNames, bones, rei, cc, scene, renderer };
+}

@@ -2,13 +2,16 @@
   "name": "signaling-mv",
   "private": true,
   "type": "module",
-  "description": "Original music video renderer for the Signaling cover (Corrupt-Chan + Ping)",
+  "description": "Music video renderers for the Signaling UTAU cover: the cel-shaded reanimation (Adachi Rei + Corrupt-Chan) and the original MV (Corrupt-Chan + Ping)",
   "scripts": {
     "analyze": "python3 analyze.py",
     "preview": "node render.mjs --serve",
-    "render": "node render.mjs"
+    "render": "node render.mjs",
+    "fetch-rei": "node fetch-rei.mjs"
   },
   "dependencies": {
+    "@fontsource/m-plus-rounded-1c": "5.2.8",
+    "@fontsource/noto-sans-jp": "5.2.8",
     "@pixiv/three-vrm": "2.1.3",
     "three": "0.164.1"
   }

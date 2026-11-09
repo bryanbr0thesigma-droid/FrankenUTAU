@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Model lab</title>
+<script type="importmap">
+{ "imports": {
+  "three": "./node_modules/three/build/three.module.js",
+  "three/addons/": "./node_modules/three/examples/jsm/",
+  "@pixiv/three-vrm": "./node_modules/@pixiv/three-vrm/lib/three-vrm.module.js"
+} }
+</script>
+<style>html,body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+import { createLab } from "./src/lab.js";
+window.LAB = await createLab();
+window.LAB_READY = true;
+</script>
+</body>
+</html>

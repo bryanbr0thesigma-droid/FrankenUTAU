@@ -14,6 +14,9 @@ const TYPES = {
   ".vrm": "application/octet-stream",
   ".png": "image/png",
   ".css": "text/css",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".jpg": "image/jpeg",
 };
 
 export function startServer(port = 0) {

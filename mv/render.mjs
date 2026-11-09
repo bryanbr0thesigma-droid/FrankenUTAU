@@ -5,6 +5,8 @@
 //   node render.mjs --stills 12,31.5,90   PNG stills -> out/still-<t>.png
 //   node render.mjs --jobs 3              split the frames over several browsers
 //   node render.mjs --serve               just serve the live preview page
+//   node render.mjs --page index          the earlier original MV (Corrupt-Chan + Ping) instead of the
+//                                         reanimation (reanim.html, the default)
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -27,11 +29,12 @@ function loadPlaywright() {
 const OUT = path.resolve(ROOT, args.outdir || "out");
 fs.mkdirSync(OUT, { recursive: true });
 const AUDIO = path.join(ROOT, "assets/signaling/signaling-rei-corrupt-FULL-MIX.wav");
+const PAGE = String(args.page || "reanim");
 
 const server = await startServer(+(args.port || 0));
 const port = server.address().port;
 if (args.serve) {
-  console.log(`preview: http://127.0.0.1:${port}/`);
+  console.log(`preview: http://127.0.0.1:${port}/${PAGE}.html`);
 } else {
   try { await main(); } finally { server.close(); }
 }
@@ -40,7 +43,7 @@ async function openPage(browser) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on("pageerror", (e) => console.error("[page error]", e.message));
   page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") console.error(`[page ${m.type()}]`, m.text()); });
-  await page.goto(`http://127.0.0.1:${port}/index.html?render=1`);
+  await page.goto(`http://127.0.0.1:${port}/${PAGE}.html?render=1`);
   await page.waitForFunction(() => window.MV_READY === true, null, { timeout: 300000 });
   return page;
 }
@@ -90,7 +93,7 @@ async function main() {
   console.log(`rendering frames ${f0}..${f1 - 1} (${f1 - f0} frames) in ${bounds.length - 1} job(s)`);
   const t0 = Date.now();
   const parts = await Promise.all(bounds.slice(0, -1).map((a, j) => renderPart(a, bounds[j + 1], j, info.fps, t0)));
-  const name = args.out || (args.from || args.to ? `slice-${(f0 / info.fps).toFixed(1)}-${(f1 / info.fps).toFixed(1)}.mp4` : "signaling-mv.mp4");
+  const name = args.out || (args.from || args.to ? `slice-${(f0 / info.fps).toFixed(1)}-${(f1 / info.fps).toFixed(1)}.mp4` : (PAGE === "reanim" ? "signaling-reanimation.mp4" : "signaling-mv.mp4"));
   const outFile = path.join(OUT, name);
   const list = path.join(OUT, "parts.txt");
   fs.writeFileSync(list, parts.map((p) => `file '${p}'`).join("\n"));

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signaling reanimation</title>
+<link rel="stylesheet" href="./node_modules/@fontsource/noto-sans-jp/500.css">
+<link rel="stylesheet" href="./node_modules/@fontsource/noto-sans-jp/700.css">
+<link rel="stylesheet" href="./node_modules/@fontsource/noto-sans-jp/900.css">
+<link rel="stylesheet" href="./node_modules/@fontsource/m-plus-rounded-1c/500.css">
+<link rel="stylesheet" href="./node_modules/@fontsource/m-plus-rounded-1c/700.css">
+<link rel="stylesheet" href="./node_modules/@fontsource/m-plus-rounded-1c/800.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./node_modules/three/build/three.module.js",
+  "three/addons/": "./node_modules/three/examples/jsm/",
+  "@pixiv/three-vrm": "./node_modules/@pixiv/three-vrm/lib/three-vrm.module.js"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; font: 14px system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage canvas { max-width: 100vw; max-height: 100vh; width: auto !important; height: auto !important; aspect-ratio: 16 / 9; }
+  #ui { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+  #ui button { background: #f2821f; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  #ui input { flex: 1; }
+  #msg { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; }
+  body.render #ui, body.render #msg { display: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="msg">loading…</div>
+<div id="ui"><button id="play">Play</button><input id="seek" type="range" min="0" max="1000" value="0"><span id="time">0:00</span></div>
+<audio id="audio" src="./assets/signaling/signaling-rei-corrupt-FULL-MIX.wav" preload="auto"></audio>
+<script type="module">
+import { createReanim } from "./src/re/main.js";
+const params = new URLSearchParams(location.search);
+const renderMode = params.has("render");
+if (renderMode) document.body.classList.add("render");
+const mv = await createReanim({ container: document.getElementById("stage") });
+window.MV = mv;
+document.getElementById("msg").textContent = "";
+if (!renderMode) {
+  const audio = document.getElementById("audio"), play = document.getElementById("play"), seek = document.getElementById("seek"), time = document.getElementById("time");
+  play.onclick = () => (audio.paused ? audio.play() : audio.pause());
+  audio.onplay = () => (play.textContent = "Pause"); audio.onpause = () => (play.textContent = "Play");
+  seek.oninput = () => { audio.currentTime = (seek.value / 1000) * mv.duration; };
+  const start = +(params.get("t") || 0); if (start) audio.currentTime = start;
+  let last = -1;
+  const loop = () => {
+    const f = Math.min(mv.frames - 1, Math.floor(audio.currentTime * mv.fps));
+    if (f !== last) { mv.renderFrame(f); last = f; }
+    if (document.activeElement !== seek) seek.value = Math.round((audio.currentTime / mv.duration) * 1000);
+    const s = Math.floor(audio.currentTime); time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+window.MV_READY = true;
+</script>
+</body>
+</html>
