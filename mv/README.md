@@ -8,6 +8,9 @@ Two music videos for the UTAU cover of 次元通信 (Signaling) in `../signaling
   missing-texture magenta. Output: `../signaling-reanimation.mp4`.
 - **The original MV** (`index.html`, Corrupt-Chan × Ping), described further down.
 
+Watch the reanimation in a browser (480p copy, served by jsDelivr from this repo):
+https://cdn.jsdelivr.net/gh/bryanbr0thesigma-droid/FrankenUTAU@0c6da31cf49bf29af9d1222f5695fe3a579406cc/signaling-reanimation-480p.mp4
+
 ## The reanimation
 
 AnythingBecomeMoe's MV is 2D animation. This version keeps its structure shot for shot: the
