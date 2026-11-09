@@ -89,6 +89,10 @@ export function ringPanel(g, x0, x1, who, t, beat, o = {}) {
     const a0 = rot + (k * TAU) / n, a1 = a0 + TAU / n;
     g.fillStyle = rgba(hl, a); g.beginPath(); g.arc(cx, cy, r2, a0, a1); g.arc(cx, cy, r1, a1, a0, true); g.closePath(); g.fill();
   }
+  if (o.grid) { // chorus 3: a wall of windows behind her
+    g.fillStyle = rgba(P.deep, 0.45);
+    for (let gx = x0 + 12; gx < x1; gx += 46) for (let gy = 14; gy < H; gy += 58) g.fillRect(gx, gy, 32, 42);
+  }
   g.strokeStyle = rgba(P.pale, 0.35); g.lineWidth = 2;
   for (let k = 0; k < n; k++) { const a = rot + (k * TAU) / n; g.beginPath(); g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); g.stroke(); }
   for (const r of [r1, r1 * 1.85]) { g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke(); }
@@ -430,7 +434,7 @@ export function creditText(g, sh, local, side) {
   for (const r of sh.roles) { g.fillText(r, x, y); y += 26; }
   if (sh.sub) { g.fillText(sh.sub, x, y + 52); }
   y += 20; g.font = `900 24px ${JP}`; g.fillStyle = "#fff"; g.fillText(sh.name, x, y);
-  if (sh.extra) { g.font = `700 16px ${JP}`; g.fillStyle = rgba(P.pale, 0.85); g.fillText(sh.extra[0], x, y + (sh.sub ? 100 : 50)); g.fillText(sh.extra[1], x, y + (sh.sub ? 122 : 72)); }
+  if (sh.extra) { g.font = `700 16px ${JP}`; g.fillStyle = rgba(P.pale, 0.85); sh.extra.forEach((e, i) => g.fillText(e, x, y + (sh.sub ? 100 : 50) + i * 22)); }
   g.globalAlpha = 1;
 }
 export function endLogo(g, local) {
@@ -516,4 +520,26 @@ export function glowEyes(g, pts, col, r = 6) {
     g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r * 1.7, 0, TAU); g.stroke();
     g.restore();
   }
+}
+
+// a red scribble over a face (chorus 3: Rei's face crossed out)
+export function scribble(g, cx, cy, r, seed) {
+  g.save(); g.strokeStyle = "#e3102e"; g.lineWidth = 6; g.lineJoin = "round"; g.lineCap = "round";
+  g.shadowColor = "#ff2040"; g.shadowBlur = 8; g.beginPath();
+  for (let i = 0; i < 46; i++) {
+    const a = hash2(i, seed) * TAU, rr_ = r * (0.25 + 0.75 * hash2(i + 9, seed));
+    const x = cx + Math.cos(a) * rr_ * 1.25, y = cy + Math.sin(a) * rr_ * 0.85;
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.stroke(); g.restore();
+}
+// tears streaming from the eyes
+export function tears(g, pts, len, phase) {
+  g.save(); g.strokeStyle = "rgba(190,235,255,0.9)"; g.lineWidth = 5; g.lineCap = "round";
+  for (const [x, y] of pts) {
+    g.beginPath(); g.moveTo(x, y + 6);
+    for (let k = 1; k <= 6; k++) g.lineTo(x + Math.sin(k * 1.3 + phase) * 3, y + 6 + (k / 6) * len);
+    g.stroke();
+  }
+  g.restore();
 }

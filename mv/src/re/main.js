@@ -15,7 +15,8 @@ import { celShade, addOutlines, outlineUniforms } from "../toon.js";
 import { Timeline } from "../timeline.js";
 import { POSES, addPose, vary } from "./poses.js";
 import { SHOTS, SUBS, LIST, shotAt, ALL_TEXT } from "./shots.js";
-import { buildProps, buildPenlight } from "./props.js";
+import { buildPenlight } from "./props.js";
+import { buildModelProps } from "./models.js";
 import { createCels, attachPenlights } from "./cels.js";
 import * as D from "./draw2d.js";
 import { REI, CC, WHO, BG, YELLOW, hex, rgba } from "./palette.js";
@@ -77,7 +78,7 @@ export async function createReanim({ container = document.body } = {}) {
   const C = (spec) => cels.cel(spec);
 
   // ---------- props ----------
-  const props = buildProps();
+  const props = await buildModelProps();
   const propScene = new THREE.Scene();
   propScene.add(new THREE.AmbientLight(0xffffff, 0.9));
   const pkey = new THREE.DirectionalLight(0xffffff, 2.0); pkey.position.set(-2, 3, 4); propScene.add(pkey);
@@ -122,6 +123,11 @@ export async function createReanim({ container = document.body } = {}) {
     if (o.bloom) { g.globalCompositeOperation = "lighter"; g.globalAlpha = (o.alpha ?? 1) * o.bloom; g.filter = "blur(12px)"; g.drawImage(c.img, -w / 2, -h, w, h); }
     g.restore();
   }
+  // where pixel p of drawing c lands when blitted into (x, y, w, h) with options o
+  function mapPt(c, x, y, w, h, o, [px, py]) {
+    const lx = ((px / c.w) * w - w / 2) * (o.sx || 1), ly = ((py / c.h) * h - h) * (o.sy || 1), r = o.rot || 0;
+    return [x + w / 2 + (o.dx || 0) + lx * Math.cos(r) - ly * Math.sin(r), y + h + (o.dy || 0) + lx * Math.sin(r) + ly * Math.cos(r)];
+  }
   function sliceGlitch(x, y, w, h, seed, amount) {
     for (let i = 0; i < 7; i++) {
       if (hash2(i, seed) > amount) continue;
@@ -142,16 +148,28 @@ export async function createReanim({ container = document.body } = {}) {
   const CHORUS_CAM = [28, 0, 1.02, 3.75, 0, 0.9, 0];
   function chorusDrawing(who, t, card, extra = {}) {
     const tq = T10(t), beat = tl.beatF(tq + 1e-4), bi = Math.floor(beat), sub = Math.floor((beat - bi) * 4) & 3;
-    const shout = card && card.lines.some(([lt, , k]) => k === "W" && tq >= lt && tq < lt + 0.8);
+    const crying = who === "rei" && card?.ch === 3 && card.lines[0][1].startsWith("こだま");
+    const shout = !crying && card && card.lines.some(([lt, , k]) => k === "W" && tq >= lt && tq < lt + 0.8);
     const name = shout ? (who === "rei" ? "R_shout" : "C_shout") : CYCLE[who][((bi % 4) + 4) % 4];
     const v = sub >= 2 ? 1 + (((bi % 3) + 3) % 3) : 0;
     let mood = who === "rei" ? (v ? { happy: 0.3, oh: 0.45 } : { happy: 0.3, aa: 0.65 }) : (v ? { relaxed: 0.25, oh: 0.4 } : { relaxed: 0.3, aa: 0.55 });
     if (card?.dim && who === "cc") mood = { sad: 0.6, blink: 0.3, oh: 0.15 };
     else if (card?.special && who === "cc") mood = { sad: 0.5, oh: v ? 0.2 : 0.35 };
     if (shout) mood = who === "rei" ? { "＞＜": 1, aa: 1 } : { Extra: 1, aa: 1 };
+    // chorus 3: Rei comes apart: shock, then crying, then her face crossed out in red
+    let fx = null;
+    if (who === "rei" && card?.ch === 3) {
+      const first = card.lines[0][1];
+      if (first.startsWith("虚空")) mood = { "瞳小": 1, "両目見開き": 1, oh: 0.6 };
+      else if (first.startsWith("こだま")) { mood = { "＞＜": 1, sad: 0.6, aa: 0.9 }; fx = "tears"; }
+      else if (first.startsWith("おい")) { mood = { "瞳ハイライト消": 1, aa: 0.7 }; fx = "scribble"; }
+    }
     if (extra.mood) mood = extra.mood;
-    const c = C({ who, pose: vary(POSES[name], v), mood, yaw: who === "rei" ? 0.22 : -0.22, cam: CHORUS_CAM, w: 510, h: 720, sticks: true });
-    return { c, bi, sub };
+    // Corrupt-Chan in choruses 2 and 3: a blank-faced ghost, then a void where her face was
+    const face = who === "cc" && card?.ch >= 2 ? (card.ch === 2 ? "blank" : "void") : undefined;
+    if (face) mood = { ...mood, Extra: 0, "＞＜": 0 };
+    const c = C({ who, pose: vary(POSES[name], v), mood, yaw: who === "rei" ? 0.22 : -0.22, cam: CHORUS_CAM, w: 510, h: 720, sticks: shout ? "left" : true, face });
+    return { c, bi, sub, fx };
   }
 
   // ---------- shot renderers ----------
@@ -166,13 +184,28 @@ export async function createReanim({ container = document.body } = {}) {
     const { dx, alpha } = slide(sh, t);
     g.globalAlpha = alpha;
     const [cx0, cx1] = L.char.map((x) => x + dx), [tx0, tx1] = L.text.map((x) => x + dx);
-    D.ringPanel(g, cx0, cx1, who, t, beat, { special: c.special, sparkle: c.ch > 1 });
-    const corrupt = who === "cc" && c.ch > 1;
-    const { c: dr, bi, sub } = chorusDrawing(who, t, c);
+    D.ringPanel(g, cx0, cx1, who, t, beat, { special: c.special, sparkle: c.ch > 1, grid: who === "rei" && c.ch === 3 });
+    const corrupt = who === "cc" && c.ch > 1, void3 = who === "cc" && c.ch === 3;
+    const { c: dr, bi, sub, fx } = chorusDrawing(who, t, c);
+    const f10 = Math.floor(T10(t) * 10), wob = wobble(bi, sub, void3 ? 1.6 : 1);
+    const opt = { ...wob, alpha, bloom: who === "rei" ? (c.ch === 2 ? 0.35 : c.ch === 3 ? 0.1 : 0) : corrupt ? 0.4 : 0 };
+    if (corrupt) {
+      opt.pixel = void3 ? (hash1(f10) > 0.6 ? 9 : 5) : (hash1(f10) > 0.8 ? 7 : 4);
+      opt.filter = void3 ? "contrast(1.35) saturate(1.4)" : "brightness(1.45) contrast(1.1) saturate(0.55)";
+    }
     g.save(); g.beginPath(); g.rect(cx0, 0, cx1 - cx0, H); g.clip();
-    blit(dr, cx0, 0, cx1 - cx0, H, { ...wobble(bi, sub), alpha, pixel: corrupt ? (hash1(Math.floor(T10(t) * 10)) > 0.8 ? 7 : 4) : 1, bloom: who === "rei" && c.ch > 1 ? 0.35 : 0 });
+    blit(dr, cx0, 0, cx1 - cx0, H, opt);
+    if (void3) { // colour split and scanlines: she is breaking up
+      blit(dr, cx0, 0, cx1 - cx0, H, { ...opt, dx: opt.dx + 7, alpha: 0.35 * alpha, bloom: 0, filter: "hue-rotate(60deg) saturate(2)" });
+      g.fillStyle = "rgba(10,0,20,0.35)"; for (let yy = (f10 * 3) % 6; yy < H; yy += 6) g.fillRect(cx0, yy, cx1 - cx0, 2);
+    }
+    if (fx) { // marks drawn on Rei's face, following the drawing
+      const eyes = dr.eyes.map((p) => mapPt(dr, cx0, 0, cx1 - cx0, H, opt, p));
+      if (fx === "tears") D.tears(g, eyes, 70, f10);
+      if (fx === "scribble" && eyes.length === 2) D.scribble(g, (eyes[0][0] + eyes[1][0]) / 2, (eyes[0][1] + eyes[1][1]) / 2 + 8, 46, f10);
+    }
     g.restore();
-    if (corrupt) sliceGlitch(cx0, 0, cx1 - cx0, H, Math.floor(t * 12), 0.35);
+    if (corrupt) sliceGlitch(cx0, 0, cx1 - cx0, H, Math.floor(t * 12), void3 ? 0.75 : 0.35);
     D.ringOverlay(g, cx0, cx1, who, (t - sh.t0) / (sh.t1 - sh.t0), L.inner);
     D.panel(g, tx0, tx1);
     D.pieIcon(g, (tx0 + tx1) / 2, 100, 24, beat, c.special ? YELLOW : "#ffffff");
@@ -180,7 +213,7 @@ export async function createReanim({ container = document.body } = {}) {
     const [wa, wb] = who === "rei" ? [cx1, tx0] : [tx1, cx0];
     D.waveform(g, wa, wb, 360, tl.loud(who, t), P.text, t);
     g.globalAlpha = 1;
-    S.post.ca = c.ch > 1 ? 0.003 : 0.0015; S.post.glow = c.ch > 1 ? 0.9 : 0.5;
+    S.post.ca = c.ch > 1 ? 0.003 : 0.0015; S.post.glow = c.ch === 2 ? 0.9 : c.ch === 3 ? (who === "rei" ? 0.45 : 0.8) : 0.5;
   };
   R.glow = (sh, t, S) => {
     const local = t - sh.t0, beat = tl.beatF(t);
@@ -320,12 +353,15 @@ export async function createReanim({ container = document.body } = {}) {
         D.stageFloor(g, x0, x1, red ? "#3a0a0e" : "#e9e4ff");
         const hand = red ? props.handRed : props.hand;
         showProp(red ? "tvRed" : "tv", ...(sh.prop !== "tv" ? [red ? "handRed" : "hand"] : []));
-        tv.position.set(0, -0.15 + (sub === 0 ? -0.03 : 0), 0); tv.rotation.set(0.05, -0.18 + Math.sin(local * 0.7) * 0.05, 0);
+        tv.position.set(0, -0.95 + (sub === 0 ? -0.03 : 0), 0); tv.rotation.set(0.05, -0.18 + Math.sin(local * 0.7) * 0.05, 0);
         tv.userData.drawScreen(tq, sh.prop === "tv" ? "bars" : "off");
         if (sh.prop !== "tv") {
-          const ext = red ? 0.42 + 0.08 * Math.sin(local * 5) : 0.25 + 0.75 * easeOut(local / 1.6);
-          hand.position.set(-0.06 + Math.sin(local * 3) * 0.03, -0.12, 0.35 + ext); hand.rotation.set(-0.35 + Math.sin(local * 4) * 0.08, -0.18, Math.sin(local * 2.5) * 0.1);
+          // the hand pushes out through the middle of the screen
+          const sb = props.tv.userData.screenBox, sc = sb.getCenter(new THREE.Vector3());
+          const ext = red ? 0.12 + 0.05 * Math.sin(local * 5) : 0.05 + 0.55 * easeOut(local / 1.6);
+          hand.position.set(sc.x - 0.04 + Math.sin(local * 3) * 0.03, sc.y - 0.33, sb.max.z + ext); hand.rotation.set(-0.15 + Math.sin(local * 4) * 0.06, -0.12, Math.sin(local * 2.5) * 0.08);
           hand.position.applyEuler(tv.rotation); hand.position.add(tv.position);
+          hand.rotation.y += tv.rotation.y;
         }
         camProp(5.1, 0.1, 0.2);
         render3D(propScene, cam, rect, { outline: 2.0 });
@@ -343,7 +379,8 @@ export async function createReanim({ container = document.body } = {}) {
       case "phones": {
         showProp("phones");
         props.phones.rotation.set(Math.sin(local * 0.9) * 0.08, Math.sin(local * 0.6) * 0.2, 0);
-        props.phones.userData.parts.fp.position.y = -0.35 + (sub === 0 ? -0.05 : 0);
+        props.phones.userData.parts.fp.position.y = -0.75 + (sub === 0 ? -0.05 : 0);
+        props.phones.position.y = -0.1;
         camProp(6.0);
         render3D(propScene, cam, rect, { outline: 2.0 });
         break;
@@ -353,9 +390,10 @@ export async function createReanim({ container = document.body } = {}) {
         g.fillStyle = "rgba(0,0,0,0.45)"; g.beginPath(); g.ellipse(640, H * 0.74, 190, 40, 0, 0, Math.PI * 2); g.fill();
         showProp(sh.prop);
         const p = props[sh.prop];
-        p.position.set(0, sh.prop === "boxbird" ? 0.38 + (sub === 0 ? 0 : 0.06) : 0, 0);
+        p.position.set(0, sh.prop === "boxbird" ? -1.3 + (sub === 0 ? 0 : 0.05) : -0.55, 0);
         if (sh.prop === "cup") p.rotation.set(0.15, -0.5 + local * 0.08, 0);
-        if (sh.prop === "boxbird") { p.rotation.set(0.15, -0.6 + Math.sin(local) * 0.15, 0); p.userData.lid.rotation.x = -0.45 - (sub % 2) * 0.25; }
+        if (sh.prop === "calendar") p.rotation.set(0.25, -0.35 + Math.sin(local * 0.6) * 0.06, 0);
+        if (sh.prop === "boxbird") { p.rotation.set(0.1, -0.6 + Math.sin(local) * 0.15, 0); p.userData.pkg.rotation.z = (sub % 2 ? 1 : -1) * 0.04; }
         if (sh.prop === "boxbird") camProp(5.4, 0.2, -0.05); else camProp(4.0, 0.3, 0.0);
         render3D(propScene, cam, rect, { outline: 2.0 });
         break;

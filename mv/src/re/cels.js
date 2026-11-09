@@ -22,6 +22,7 @@ export function attachPenlights(b, color, sides, scale = 2.0) {
     p.position.set(sg * 0.072, -0.02, -0.055 * scale);
     p.rotation.set(-Math.PI / 2, 0, 0);
     p.traverse((o) => { o.userData.penlight = true; });
+    p.userData.side = side;
     n.add(p);
     out.push(p);
   }
@@ -72,6 +73,54 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
       }
     };
   }
+  // clean line art for the dark silhouette: every material in its own flat colour, then lines
+  // only where two parts meet or at the outer edge (no hair-strand or seam lines)
+  function swapID(root) {
+    const saved = [], cache = new Map(); let n = 0;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      saved.push([o, o.material, o.visible]);
+      if (o.userData.isOutline || o.userData.penlight) { o.visible = false; return; }
+      const repl = [].concat(o.material).map((src) => {
+        if (cache.has(src)) return cache.get(src);
+        n++;
+        const col = new THREE.Color().setRGB(((n * 67) % 251) / 255, ((n * 131) % 241) / 255, ((n * 197) % 239) / 255, THREE.SRGBColorSpace);
+        let m;
+        if (src && (src.alphaTest > 0 || src.transparent) && src.map) {
+          m = new THREE.MeshBasicMaterial({ color: col, map: src.map, alphaTest: src.alphaTest > 0 ? src.alphaTest : 0.5, side: THREE.DoubleSide });
+          m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <map_fragment>", "#include <map_fragment>\n diffuseColor.rgb = diffuse;"); };
+        } else m = new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide });
+        cache.set(src, m); return m;
+      });
+      o.material = Array.isArray(o.material) ? repl : repl[0];
+    });
+    return () => { for (const [o, m, vis] of saved) { o.material = m; o.visible = vis; } };
+  }
+  function traceLines(idc, fill, line) {
+    const w = idc.width, h = idc.height, x = idc.getContext("2d");
+    const d = x.getImageData(0, 0, w, h).data, out = x.createImageData(w, h), o = out.data;
+    const F = new THREE.Color(fill), L = new THREE.Color(line);
+    const rgb = (c) => { const v = c.getHex(); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }; // sRGB bytes
+    const fr = rgb(F), lr = rgb(L);
+    const diff = (i, j) => Math.abs(d[i] - d[j]) + Math.abs(d[i + 1] - d[j + 1]) + Math.abs(d[i + 2] - d[j + 2]);
+    for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+      const i = (yy * w + xx) * 4;
+      if (d[i + 3] < 128) continue;
+      let edge = false;
+      for (const [dx, dy, outer] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [2, 0, 1], [-2, 0, 1], [0, 2, 1], [0, -2, 1]]) {
+        const X = xx + dx, Y = yy + dy;
+        if (X < 0 || Y < 0 || X >= w || Y >= h) { edge = true; break; }
+        const j = (Y * w + X) * 4;
+        if (d[j + 3] < 128) { edge = true; break; }          // the outer contour (2 px)
+        if (!outer && diff(i, j) > 30) { edge = true; break; } // where two parts meet (1 px each side)
+      }
+      const c = edge ? lr : fr;
+      o[i] = c[0]; o[i + 1] = c[1]; o[i + 2] = c[2]; o[i + 3] = 255;
+    }
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").putImageData(out, 0, 0);
+    return c;
+  }
   function renderTo(w, h) {
     gl.setScissorTest(true); gl.setViewport(0, H - h, w, h); gl.setScissor(0, H - h, w, h);
     gl.clear(true, true, true);
@@ -87,7 +136,8 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     if (cache.has(key)) { const r = cache.get(key); cache.delete(key); cache.set(key, r); stats.hits++; return r; }
     const a = actors[spec.who];
     for (const k of Object.keys(actors)) actors[k].holder.visible = k === spec.who;
-    for (const p of a.sticks || []) p.visible = !!spec.sticks;
+    // sticks: true, or "left" (the shouts: the right fist is at her mouth, its glow would hide her face)
+    for (const p of a.sticks || []) p.visible = spec.sticks === true || spec.sticks === p.userData.side;
     applyPose(a.vrm, spec.pose);
     a.holder.position.set(spec.x || 0, 0, 0); a.holder.rotation.set(0, spec.yaw || 0, 0);
     placeOnFloor(a);
@@ -101,10 +151,37 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     a.holder.updateMatrixWorld(true);
     outlineUniforms.uRes.value.set(spec.w, spec.h);
     outlineUniforms.uOutlinePx.value = spec.outline ?? 1.8;
-    let restore = null;
-    if (spec.mode === "dark" || spec.mode === "flat") restore = swapDark(a.b.root, spec.fill, spec.line || spec.fill, spec.mode === "flat");
-    const img = renderTo(spec.w, spec.h);
-    if (restore) restore();
+    // faces for the later choruses: "blank" (features gone) or "void" (the face filled black)
+    const faceUndo = [];
+    if (spec.face) {
+      const FEAT = /FaceMouth|EyeWhite|Eyeline|Eyelash|Brow|EyeIris|EyeHighlight|EyeExtra/i;
+      const black = new THREE.MeshBasicMaterial({ color: 0x07020c });
+      a.b.root.traverse((o) => {
+        if (!o.isMesh || o.userData.isOutline) return;
+        const mats = [].concat(o.material);
+        mats.forEach((m, k) => {
+          if (FEAT.test(m.name)) { faceUndo.push(() => { m.visible = true; }); m.visible = false; }
+          else if (spec.face === "void" && /Face_00_SKIN/.test(m.name)) {
+            const prev = o.material;
+            if (Array.isArray(o.material)) { const arr = o.material.slice(); arr[k] = black; o.material = arr; } else o.material = black;
+            faceUndo.push(() => { o.material = prev; });
+          }
+        });
+      });
+    }
+    let img;
+    if (spec.mode === "dark") {
+      const restore = swapID(a.b.root);
+      const idc = renderTo(spec.w, spec.h);
+      restore();
+      img = traceLines(idc, spec.fill, spec.line);
+    } else {
+      let restore = null;
+      if (spec.mode === "flat") restore = swapDark(a.b.root, spec.fill, spec.fill, true);
+      img = renderTo(spec.w, spec.h);
+      if (restore) restore();
+    }
+    for (const u of faceUndo.reverse()) u();
     // penlight glow: the blades alone, blurred
     let glow = null;
     if (spec.sticks && spec.mode !== "dark" && spec.mode !== "flat" && (a.sticks || []).length) {

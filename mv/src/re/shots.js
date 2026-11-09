@@ -106,7 +106,7 @@ export const SHOTS = [
   card(CH3[6]),
   { type: "link", t0: 164.4, t1: 164.8, to: "rei" },
   { type: "credit", t0: 164.8, t1: 168.0, who: "rei", pose: "danceB", roles: ["Producer", "Composition", "Lyrics", "Arrangement", "by"], name: "AnythingBecomeMoe" },
-  { type: "credit", t0: 168.0, t1: 171.2, who: "cc", pose: "danceA", roles: ["Original storyboard", "Character design", "Animation", "by"], name: "AnythingBecomeMoe", extra: ["3D reanimation", "bryanbr0"] },
+  { type: "credit", t0: 168.0, t1: 171.2, who: "cc", pose: "danceA", roles: ["Original storyboard", "Character design", "Animation", "by"], name: "AnythingBecomeMoe", extra: ["3D reanimation", "bryanbr0", "Props: 3moji by jeremytoys", "(CC BY-SA 4.0)"] },
   { type: "credit", t0: 171.2, t1: 174.4, who: "rei", pose: "danceC", roles: ["VOCAL by"], name: "Adachi Rei", sub: "in UTAU", extra: ["3D model", "みさいる (Mechanical Girl)"] },
   { type: "credit", t0: 174.4, t1: 176.8, who: "cc", pose: "danceD", roles: ["VOCAL by"], name: "Corrupt-Chan", sub: "in UTAU", extra: ["Character: mono23", "Tuning & 3D model: bryanbr0"] },
   { type: "end", t0: 176.8, t1: 180.2 },

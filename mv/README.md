@@ -31,22 +31,30 @@ full mix lines up with it at zero offset.
 - **Penlights.** Both singers hold concert penlights (Rei one in each hand, Corrupt-Chan one in
   her right). The same model, scaled up, is the glowstick shot. Corrupt-Chan's raised leg bends
   back behind her so it stays inside her skirt.
-- **Verse silhouettes.** As in the original, the sitting singer is a dark silhouette with rim
-  lines in her colour and glowing eyes, cut by a hard diagonal of light. A picture flashes up
-  behind her on each line: sun, moon, clouds, gears, drips, lightning, glitch bars, the other
-  girl's silhouette, and Corrupt-Chan's cracks flooding Rei's panel at the end.
+- **Verse silhouettes.** As in the original, the sitting singer is a dark silhouette with clean
+  line art in her colour and glowing eyes, cut by a hard diagonal of light. The lines come from a
+  pass that gives every material its own flat colour, then traces only where two parts meet and
+  the outer edge. A picture flashes up behind her on each line: sun, moon, clouds, gears, drips,
+  lightning, glitch bars, the other girl's silhouette, and Corrupt-Chan's cracks flooding Rei's
+  panel at the end.
+- **Props** are 3moji models (`models/3moji/`, CC BY-SA 4.0, credited in the video), toon-shaded
+  and recoloured: the TV with colour bars, the red TV, the hand pushing out of the screen, the
+  handset and the cracked smartphone, the cup, the tear-off calendar, and the box on bird legs.
 - **Faces.** As in the official MV there is no lip sync: each pose holds a mouth shape. Named
   expressions set the mood, including Rei's own ＞＜, びっくり, 瞳小 and 瞳ハイライト消, and
   Corrupt-Chan's ＞＜ ("Extra").
-- **Corrupt-Chan's corruption.** In choruses 2 and 3 her panel renders pixelated with sliced
-  glitches, and in chorus 3 her lines arrive faded.
+- **The later choruses.** As in the original, the singers stop looking normal. In chorus 2,
+  Corrupt-Chan is a washed-out, faceless, pixelated ghost. In chorus 3, her face is a black void
+  and she breaks up (bigger pixels, colour split, scanlines, slices), and her lines arrive faded.
+  Rei comes apart in chorus 3: wide-eyed shock, then crying (＞＜ with tears), then her face
+  crossed out in red on "おい、今どこだ？", in front of a wall of windows.
 - **Lyrics** are shown as in the official MV: chat bubbles, chorus cards, the typed list of the
   second verse, and subtitles in the monitor shots.
 
 ### Render it
 
 You need Node 20+, Python 3 with numpy, ffmpeg, and Playwright's Chromium. A GPU isn't needed,
-because headless SwiftShader works. The full video takes about 18 minutes on 4 cores with
+because headless SwiftShader works. The full video takes about 15 minutes on 4 cores with
 `--jobs 3`.
 
 ```
@@ -74,7 +82,9 @@ cels:rei:R_V,R_spread` renders model test sheets into `out/`.
 | `src/re/main.js` | the engine: which drawing each shot shows and how it moves, the shot renderers, prop rendering, the post pass |
 | `src/re/cels.js` | drawings: renders and caches a performer in a pose (colour, dark silhouette with rim lines, or flat), penlight glow, eye positions; attaches the penlights |
 | `src/re/draw2d.js` | the 2D layer: chat panels and keyboards, chorus rings and lyric cards, subtitles, call screen, drawn props, credits |
-| `src/re/props.js` | cel-shaded 3D props: TV (and red TV), reaching hand, concert penlight, handset and flip phone, mug, calendar, box on bird legs |
+| `src/re/models.js` | the props from 3moji models: toon materials, recolouring, screens laid over the TV and phone |
+| `src/re/props.js` | toon material helper and the concert penlight |
+| `models/3moji/` | the 3moji models used, their licence and credit |
 | `src/re/poses.js` | key poses (verse knee hug, chorus cycles, shouts, close-ups), hand-drawn variants, application to VRM bones |
 | `src/re/palette.js` | colours |
 | `src/rei.js`, `src/toon.js` | Rei's loader; cel shading, outlines and silhouettes |
@@ -90,6 +100,7 @@ cels:rei:R_V,R_spread` renders model test sheets into `out/`.
 | Tuning, Corrupt-Chan 3D model | bryanbr0 |
 | Adachi Rei 3D model | みさいる (Mechanical Girl), ver1.0.0 |
 | Corrupt-Chan base models | VRoid samples "Darkness Shibu" and "Sendagaya Shino" (CC0) |
+| Props | 3moji by jeremytoys (CC BY-SA 4.0) |
 
 ## The original MV (Corrupt-Chan × Ping)
 
