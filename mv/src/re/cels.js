@@ -1,0 +1,131 @@
+// "Drawings": the performers rendered once per pose into a canvas, then animated in 2D like the
+// cels of the hand-drawn MV (swapped about ten times a second, shifted, bounced, squashed).
+//
+// cel(spec) -> { img, glow, eyes } where spec is
+//   { who, pose, mood, yaw, x, cam: [fov, px, py, pz, lx, ly, lz], w, h,
+//     mode: "color" | "dark" | "flat", fill, line, sticks, outline }
+// "dark" is the verses' look: the body filled with the night colour, rim lines in `line`, and the
+// eye positions returned so they can glow; "flat" is a plain silhouette in `fill`.
+import * as THREE from "three";
+import { outlineUniforms } from "../toon.js";
+import { applyPose } from "./poses.js";
+import { buildPenlight } from "./props.js";
+
+export function attachPenlights(b, color, sides, scale = 2.0) {
+  const out = [];
+  for (const side of sides) {
+    const n = b.vrm.humanoid.getNormalizedBoneNode(side + "Hand");
+    const sg = side === "left" ? -1 : 1;
+    const p = buildPenlight(color, { scale });
+    // in the fist, gripped round the middle of the handle: along the hand's front-back axis,
+    // blade out of the thumb side (forward, -z in the rig frame)
+    p.position.set(sg * 0.072, -0.02, -0.055 * scale);
+    p.rotation.set(-Math.PI / 2, 0, 0);
+    p.traverse((o) => { o.userData.penlight = true; });
+    n.add(p);
+    out.push(p);
+  }
+  return out;
+}
+
+export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
+  const cache = new Map();
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 100);
+  const look = new THREE.Object3D(); scene.add(look);
+  const v = new THREE.Vector3(), v2 = new THREE.Vector3();
+  let stats = { made: 0, hits: 0 };
+
+  function placeOnFloor(a) {
+    a.vrm.humanoid.update();
+    a.holder.updateMatrixWorld(true);
+    const y = Math.min(a.H.getRawBoneNode("leftFoot").getWorldPosition(v).y, a.H.getRawBoneNode("rightFoot").getWorldPosition(v2).y);
+    a.holder.position.y += a.footY - y;
+  }
+  function swapDark(root, fill, line, flat) {
+    const saved = [];
+    // double-sided, so the insides of sleeves and skirts hide the outline shell behind them
+    const fillM = new THREE.MeshBasicMaterial({ color: fill, side: THREE.DoubleSide });
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      saved.push([o, o.material, o.visible]);
+      if (o.userData.penlight) { o.visible = false; return; }
+      if (o.userData.isOutline) {
+        if (flat) { o.visible = false; return; }
+        const mats = [].concat(o.material);
+        for (const m of mats) { m.userData.c0 = m.color.getHex(); m.color.set(line); }
+        return;
+      }
+      const src = [].concat(o.material)[0];
+      let m = fillM;
+      // cut-outs and blended parts (Corrupt-Chan's dress is a blended material) keep their alpha
+      // as a hard cut-out, so the silhouette has no holes and nothing behind shows through
+      if (src && (src.alphaTest > 0 || src.transparent) && src.map) {
+        m = new THREE.MeshBasicMaterial({ color: fill, map: src.map, alphaTest: src.alphaTest > 0 ? src.alphaTest : 0.5, side: THREE.DoubleSide });
+        m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <map_fragment>", "#include <map_fragment>\n diffuseColor.rgb = diffuse;"); };
+      }
+      o.material = Array.isArray(o.material) ? o.material.map(() => m) : m;
+    });
+    return () => {
+      for (const [o, m, vis] of saved) {
+        o.material = m; o.visible = vis;
+        if (o.userData.isOutline) for (const mm of [].concat(m)) if (mm.userData.c0 !== undefined) { mm.color.setHex(mm.userData.c0); delete mm.userData.c0; }
+      }
+    };
+  }
+  function renderTo(w, h) {
+    gl.setScissorTest(true); gl.setViewport(0, H - h, w, h); gl.setScissor(0, H - h, w, h);
+    gl.clear(true, true, true);
+    gl.render(scene, cam);
+    gl.setScissorTest(false);
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(gl.domElement, 0, 0, w, h, 0, 0, w, h);
+    return c;
+  }
+
+  function cel(spec) {
+    const key = JSON.stringify(spec);
+    if (cache.has(key)) { const r = cache.get(key); cache.delete(key); cache.set(key, r); stats.hits++; return r; }
+    const a = actors[spec.who];
+    for (const k of Object.keys(actors)) actors[k].holder.visible = k === spec.who;
+    for (const p of a.sticks || []) p.visible = !!spec.sticks;
+    applyPose(a.vrm, spec.pose);
+    a.holder.position.set(spec.x || 0, 0, 0); a.holder.rotation.set(0, spec.yaw || 0, 0);
+    placeOnFloor(a);
+    const [fov, px, py, pz, lx, ly, lz] = spec.cam;
+    cam.fov = fov; cam.aspect = spec.w / spec.h; cam.position.set(px, py, pz); cam.lookAt(lx, ly, lz); cam.updateProjectionMatrix();
+    look.position.copy(cam.position);
+    if (a.vrm.lookAt) a.vrm.lookAt.target = look;
+    faceFn(a, spec.mood || {});
+    a.vrm.springBoneManager?.reset(); a.b.hairVrm?.springBoneManager?.reset();
+    for (let i = 0; i < 36; i++) spec.who === "cc" ? a.b.update(1 / 30, i / 30, { glitch: false }) : a.b.update(1 / 30);
+    a.holder.updateMatrixWorld(true);
+    outlineUniforms.uRes.value.set(spec.w, spec.h);
+    outlineUniforms.uOutlinePx.value = spec.outline ?? 1.8;
+    let restore = null;
+    if (spec.mode === "dark" || spec.mode === "flat") restore = swapDark(a.b.root, spec.fill, spec.line || spec.fill, spec.mode === "flat");
+    const img = renderTo(spec.w, spec.h);
+    if (restore) restore();
+    // penlight glow: the blades alone, blurred
+    let glow = null;
+    if (spec.sticks && spec.mode !== "dark" && spec.mode !== "flat" && (a.sticks || []).length) {
+      const hidden = [];
+      scene.traverse((o) => { if (o.isMesh && o.visible && !o.userData.blade) { hidden.push(o); o.visible = false; } });
+      const raw = renderTo(spec.w, spec.h);
+      for (const o of hidden) o.visible = true;
+      glow = document.createElement("canvas"); glow.width = spec.w >> 1; glow.height = spec.h >> 1;
+      const gg = glow.getContext("2d"); gg.filter = "blur(5px)"; gg.drawImage(raw, 0, 0, glow.width, glow.height); gg.filter = "blur(2px)"; gg.drawImage(raw, 0, 0, glow.width, glow.height);
+    }
+    // eye positions (for the glowing eyes of the dark verse look)
+    const eyes = [];
+    for (const n of ["leftEye", "rightEye"]) {
+      const b = a.H.getRawBoneNode(n); if (!b) continue;
+      b.getWorldPosition(v).project(cam);
+      eyes.push([(v.x + 1) / 2 * spec.w, (1 - v.y) / 2 * spec.h]);
+    }
+    const r = { img, glow, eyes, w: spec.w, h: spec.h };
+    cache.set(key, r); stats.made++;
+    if (cache.size > max) cache.delete(cache.keys().next().value);
+    return r;
+  }
+  return { cel, stats: () => stats };
+}

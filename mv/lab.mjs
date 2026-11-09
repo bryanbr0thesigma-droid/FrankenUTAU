@@ -17,6 +17,11 @@ await page.waitForFunction(() => window.LAB_READY === true, null, { timeout: 300
 fs.mkdirSync(path.join(ROOT, "out"), { recursive: true });
 for (const spec of process.argv.slice(2)) {
   const [mode, view, ang] = spec.split(":");
+  if (mode === "cels") {
+    const url = await page.evaluate(([w, n]) => LAB.celSheet(w, n.split(",")), [view, ang]);
+    const f = path.join(ROOT, "out", `lab-cels-${view}.png`);
+    fs.writeFileSync(f, Buffer.from(url.split(",")[1], "base64")); console.log("wrote", f); continue;
+  }
   if (mode === "names") { console.log(JSON.stringify(await page.evaluate(() => LAB.exprNames()))); continue; }
   if (mode === "expr") {
     const url = await page.evaluate((v) => LAB.expr(v), view);

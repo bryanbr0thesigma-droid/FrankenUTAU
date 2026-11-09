@@ -110,6 +110,43 @@ export const POSES = {
   },
 };
 
+// ---------- chorus "drawings" ----------
+// Rei: standing on her left leg, right knee raised in front (the MV's flamingo), a penlight in
+// each fist. Corrupt-Chan: standing on her left leg, right leg bent back behind her (a raised
+// knee would push through her skirt), one penlight in her right fist.
+const REI_LEGS = { leftUpperLeg: d(-4, 0, 2), leftLowerLeg: d(-6, 0, 0), rightUpperLeg: d(64, -12, -30), rightLowerLeg: d(-112, 0, 0), rightFoot: d(30, 0, 0) };
+const CC_LEGS = { leftUpperLeg: d(-2, 0, 2), leftLowerLeg: d(-4, 0, 0), rightUpperLeg: d(14, -4, -6), rightLowerLeg: d(-104, 0, 0), rightFoot: d(-20, 0, 0) };
+const chor = (legs, hips, b, L, Rr, curl = [0.92, 0.92]) => ({ hips: [0, -0.03, 0], b: { ...legs, hips: d(...hips), ...b }, arms: { L, R: Rr }, curl });
+Object.assign(POSES, {
+  // both arms up in a V, chin up
+  R_V: chor(REI_LEGS, [0, 6, 0], { spine: d(4, 0, 0), chest: d(6, 0, 0), head: d(10, 0, 4) }, arm(0.55, 1, 0.12, 0.25), arm(0.55, 1, 0.12, 0.25)),
+  // arms spread wide, slightly up
+  R_spread: chor(REI_LEGS, [0, -6, 2], { spine: d(2, 4, -2), chest: d(2, 2, -3), head: d(4, -8, 8) }, arm(1, 0.25, 0.15, 0.2), arm(1, 0.25, 0.15, 0.2)),
+  // spread, lower, leaning the other way
+  R_spread2: chor(REI_LEGS, [0, 8, -3], { spine: d(-2, -4, 4), chest: d(-2, -2, 4), head: d(2, 10, -9) }, arm(1, -0.05, 0.25, 0.35), arm(1, 0.05, 0.2, 0.3)),
+  // leaning to her left, right arm up, left arm out low
+  R_lean: chor(REI_LEGS, [0, -10, 6], { spine: d(-4, 6, 8), chest: d(-2, 4, 6), head: d(-2, -10, 10) }, arm(1, -0.55, 0.15, 0.3), arm(0.35, 1, 0.15, 0.35)),
+  // the shout: right fist to the mouth, left arm flung out
+  R_shout: chor(REI_LEGS, [0, 8, 0], { spine: d(-10, -4, 0), chest: d(-8, -4, 0), head: d(-6, 6, 0) }, arm(1, -0.1, 0.3, 0.3), arm(0.35, -0.7, 0.55, 2.2), [0.92, 1]),
+
+  // right arm straight up with the penlight, left arm out low, hand open
+  C_up: chor(CC_LEGS, [0, -8, 0], { spine: d(0, -4, -3), chest: d(2, -4, -3), head: d(6, -12, -8) }, arm(1, -0.35, 0.1, 0.3), arm(0.15, 1, 0.08, 0.15), [0.25, 0.92]),
+  C_spread: chor(CC_LEGS, [0, 6, -2], { spine: d(2, 4, 2), chest: d(4, 2, 2), head: d(6, 8, 6) }, arm(1, 0.15, 0.12, 0.2), arm(1, 0.2, 0.12, 0.2), [0.25, 0.92]),
+  C_spreadHi: chor(CC_LEGS, [0, -4, 3], { spine: d(4, -2, -2), chest: d(6, -2, -3), head: d(10, -6, -6) }, arm(1, 0.5, 0.15, 0.3), arm(1, 0.55, 0.15, 0.3), [0.25, 0.92]),
+  C_spreadLo: chor(CC_LEGS, [0, 10, 4], { spine: d(-4, 6, 5), chest: d(-2, 4, 4), head: d(2, 12, 8) }, arm(1, -0.2, 0.2, 0.35), arm(1, -0.1, 0.25, 0.3), [0.25, 0.92]),
+  C_shout: chor(CC_LEGS, [0, -6, 0], { spine: d(-10, 4, 0), chest: d(-8, 4, 0), head: d(-6, -6, 0) }, arm(0.4, -0.7, 0.55, 2.0), arm(1, 0.05, 0.3, 0.3), [0.9, 0.92]),
+});
+
+// a hand-drawn variant of a pose: small deterministic changes (k = 0 is the pose itself)
+export function vary(p, k, amt = 1) {
+  if (!k) return p;
+  const h = (i) => (Math.sin(k * 12.9898 + i * 78.233) * 43758.5453) % 1;
+  const a = amt * 0.07;
+  const out = addPose(p, { head: [h(1) * a, h(2) * a * 1.4, h(3) * a], chest: [h(4) * a * 0.5, h(5) * a * 0.6, h(6) * a * 0.5], hips_pos: [0, -Math.abs(h(7)) * 0.012 * amt, 0] });
+  if (out.arms) for (const s of ["L", "R"]) { out.arms[s] = { ...out.arms[s], up: out.arms[s].up + h(8 + (s === "L" ? 0 : 1)) * 0.12 * amt, bend: out.arms[s].bend + h(10) * 0.12 * amt }; }
+  return out;
+}
+
 const FINGERS = ["Index", "Middle", "Ring", "Little"];
 const PARTS = ["Proximal", "Intermediate", "Distal"];
 const BONES = [

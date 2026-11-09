@@ -442,3 +442,78 @@ export function endLogo(g, local) {
   g.globalAlpha = 1;
 }
 export { BG, PANEL, PANEL_HI, INK, rgba };
+
+// ---------- verse motifs: flash up behind the silhouette on the lyric ----------
+export function motif(g, kind, x0, x1, who, local) {
+  const P = WHO[who], w = x1 - x0, cx = (x0 + x1) / 2;
+  const col = who === "cc" ? P.text : P.light;
+  g.save(); g.beginPath(); g.rect(x0, 0, w, H); g.clip();
+  if (kind === "sun") {
+    const sx = cx + 10, sy = 150;
+    g.fillStyle = "#ffc23a"; g.beginPath(); g.arc(sx, sy, 62, 0, TAU); g.fill();
+    g.strokeStyle = "#ffc23a"; g.lineCap = "round";
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * TAU, r0 = 82 + (i % 3) * 10, r1 = r0 + 30 + (i % 2) * 34;
+      g.lineWidth = i % 2 ? 4 : 6; g.beginPath(); g.moveTo(sx + Math.cos(a) * r0, sy + Math.sin(a) * r0); g.lineTo(sx + Math.cos(a) * r1, sy + Math.sin(a) * r1); g.stroke();
+    }
+    for (let i = 0; i < 26; i++) { const a = hash1(i) * TAU, r = 170 + hash1(i * 3) * 90; g.fillStyle = "#ffc23a"; g.fillRect(sx + Math.cos(a) * r, sy + Math.sin(a) * r, 4, 4); }
+  } else if (kind === "moon") {
+    g.fillStyle = P.light; g.beginPath(); g.arc(cx - 40, 110, 46, 0, TAU); g.fill();
+    g.fillStyle = P.night; g.beginPath(); g.arc(cx - 18, 94, 44, 0, TAU); g.fill();
+  } else if (kind === "clouds") {
+    g.fillStyle = P.light;
+    for (let i = 0; i < 9; i++) { const yy = 30 + (i % 3) * 52 + hash1(i) * 20, xx = x0 - 40 + hash1(i * 7) * (w + 40), ww = 120 + hash1(i * 5) * 200; rr(g, xx, yy, ww, 22 + hash1(i * 9) * 26, 14); g.fill(); }
+    for (let i = 0; i < 14; i++) { g.fillRect(x0 + hash1(i * 11) * w, 200 + hash1(i * 13) * 40, 40 + hash1(i) * 120, 4); }
+  } else if (kind === "gears") {
+    for (const [gx, gy, r, sp] of [[x0 + 60, 120, 120, 1], [x1 - 40, 70, 90, -1.3], [cx + 30, 300, 80, 1.6], [x0 + 30, 400, 70, -1.1], [x1 - 60, 380, 110, 0.9], [cx - 60, 30, 60, -2]]) {
+      g.save(); g.translate(gx, gy); g.rotate(local * sp); g.strokeStyle = col; g.lineWidth = 7; g.beginPath();
+      const n = 14;
+      for (let i = 0; i <= n * 2; i++) { const rr_ = i % 2 ? r : r * 0.86, aa = (i / (n * 2)) * TAU; g.lineTo(Math.cos(aa) * rr_, Math.sin(aa) * rr_); }
+      g.stroke(); g.beginPath(); g.arc(0, 0, r * 0.32, 0, TAU); g.stroke();
+      for (let k = 0; k < 6; k++) { const aa = (k / 6) * TAU; g.beginPath(); g.moveTo(Math.cos(aa) * r * 0.32, Math.sin(aa) * r * 0.32); g.lineTo(Math.cos(aa) * r * 0.82, Math.sin(aa) * r * 0.82); g.stroke(); }
+      g.restore();
+    }
+    g.fillStyle = col; for (let i = 0; i < 30; i++) g.fillRect(x0 + hash1(i * 2.3) * w, hash1(i * 4.1) * 480, 6 + hash1(i) * 14, 3 + hash1(i * 7) * 8);
+  } else if (kind === "spikes") {
+    g.fillStyle = col;
+    for (let i = 0; i < 16; i++) {
+      const a = Math.PI * 1.05 + (i / 15) * Math.PI * 1.9, r0 = 150, r1 = 330 + hash1(i) * 120, ox = cx, oy = 330;
+      const p0 = [ox + Math.cos(a) * r0, oy + Math.sin(a) * r0], p1 = [ox + Math.cos(a) * r1, oy + Math.sin(a) * r1];
+      const nx = -Math.sin(a) * 9, ny = Math.cos(a) * 9;
+      g.beginPath(); g.moveTo(p0[0] - nx, p0[1] - ny); g.lineTo((p0[0] + p1[0]) / 2 + nx * 2, (p0[1] + p1[1]) / 2 + ny * 2); g.lineTo(p1[0], p1[1]); g.lineTo((p0[0] + p1[0]) / 2 - nx * 0.5, (p0[1] + p1[1]) / 2 - ny * 0.5); g.lineTo(p0[0] + nx, p0[1] + ny); g.closePath(); g.fill();
+    }
+  } else if (kind === "bars") {
+    const shades = who === "cc" ? [P.text, "#c4189f", "#8a1576", "#5a1050", P.main] : [P.main, P.light, "#c4600f", "#7a3a0a", P.pale];
+    let xx = x0;
+    for (let i = 0; xx < x1; i++) { const ww = 30 + hash1(i * 3.3 + Math.floor(local * 10)) * 60; g.fillStyle = shades[i % shades.length]; g.fillRect(xx, 0, ww, H * 0.55); xx += ww; }
+    g.fillStyle = shades[0]; g.fillRect(x0, H * 0.55, 40, 60); g.fillRect(x1 - 70, H * 0.42, 50, 40);
+  } else if (kind === "cracks") {
+    g.strokeStyle = CC.text; g.lineWidth = 4; g.shadowColor = CC.text; g.shadowBlur = 10;
+    const n = 3 + Math.floor(local * 14);
+    for (let i = 0; i < n; i++) {
+      let x = x0 + 60 + hash1(i * 5.1) * (w - 120), y = 10 + hash1(i * 2.7) * 300;
+      g.beginPath(); g.moveTo(x, y);
+      for (let j = 0; j < 4; j++) { x += (hash2(i, j) - 0.5) * 70; y += 10 + hash2(j, i) * 50; g.lineTo(x, y); }
+      g.stroke();
+    }
+  }
+  g.restore();
+}
+// little drips running down the dark silhouette (Corrupt-Chan's "anxiety")
+export function drips(g, cx, top, local, col) {
+  g.strokeStyle = col; g.lineWidth = 3; g.lineCap = "round";
+  for (let i = 0; i < 12; i++) {
+    const x = cx - 150 + hash1(i * 3.7) * 300, y = top + hash1(i * 1.9) * 150 + Math.min(1, local * 2) * 8;
+    g.beginPath(); g.moveTo(x - 5, y); g.quadraticCurveTo(x, y + 14, x + 5, y); g.stroke();
+  }
+}
+// glowing eyes in a dark face
+export function glowEyes(g, pts, col, r = 6) {
+  for (const [x, y] of pts) {
+    g.save(); g.shadowColor = col; g.shadowBlur = 14;
+    g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    g.fillStyle = "#ffffff"; g.beginPath(); g.arc(x, y, r * 0.45, 0, TAU); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r * 1.7, 0, TAU); g.stroke();
+    g.restore();
+  }
+}

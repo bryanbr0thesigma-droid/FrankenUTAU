@@ -7,6 +7,8 @@ import { buildRei } from "./rei.js";
 import { celShade, addOutlines, outlineUniforms } from "./toon.js";
 import { mulberry32 } from "./util.js";
 import { POSES, applyPose } from "./re/poses.js";
+import { createCels, attachPenlights } from "./re/cels.js";
+import { REI, CC } from "./re/palette.js";
 Math.random = mulberry32(7);
 
 export async function createLab({ width = 1280, height = 720 } = {}) {
@@ -77,6 +79,30 @@ export async function createLab({ width = 1280, height = 720 } = {}) {
     return renderer.domElement.toDataURL("image/png");
   }
   function exprNames() { return { rei: rei.vrm.expressionManager.expressions.map((e) => e.expressionName), cc: cc.vrm.expressionManager.expressions.map((e) => e.expressionName) }; }
+  // chorus drawings: one character, several poses, on her panel colour, penlights and glow
+  let cels = null;
+  function celSheet(who, names) {
+    toon();
+    if (!cels) {
+      const mk = (b, k) => { const g = new THREE.Group(); scene.add(g); g.add(b.root); b.root.position.x = 0; const H = b.vrm.humanoid; b.root.updateMatrixWorld(true); return { key: k, b, vrm: b.vrm, holder: g, H, footY: H.getRawBoneNode("leftFoot").getWorldPosition(new THREE.Vector3()).y }; };
+      const actors = { rei: mk(rei, "rei"), cc: mk(cc, "cc") };
+      actors.rei.sticks = attachPenlights(rei, 0xffa23f, ["left", "right"]);
+      actors.cc.sticks = attachPenlights(cc, 0xb070ff, ["right"]);
+      const faceFn = (a, mood) => { const em = a.vrm.expressionManager; for (const e of em.expressions) em.setValue(e.expressionName, 0); for (const [n, w] of Object.entries(mood)) if (em.getExpression(n)) em.setValue(n, w); };
+      scene.background = null; renderer.setClearColor(0x000000, 0);
+      cels = createCels({ gl: renderer, H: height, actors, scene, faceFn });
+    }
+    const out = document.createElement("canvas"); out.width = 255 * names.length; out.height = 360;
+    const g = out.getContext("2d");
+    names.forEach((n, i) => {
+      g.fillStyle = who === "rei" ? REI.main : CC.main; g.fillRect(i * 255, 0, 255, 360);
+      const c = cels.cel({ who, pose: POSES[n], mood: { aa: 0.6 }, yaw: who === "rei" ? 0.22 : -0.22, cam: [28, 0, 1.0, 4.5, 0, 0.86, 0], w: 510, h: 720, sticks: true });
+      g.drawImage(c.img, i * 255, 0, 255, 360);
+      if (c.glow) { g.globalCompositeOperation = "lighter"; g.drawImage(c.glow, i * 255, 0, 255, 360); g.globalCompositeOperation = "source-over"; }
+      g.fillStyle = "#fff"; g.font = "12px sans-serif"; g.fillText(n, i * 255 + 4, 14);
+    });
+    return out.toDataURL("image/png");
+  }
   function bones() {
     const out = {};
     for (const [k, b] of Object.entries({ rei, cc })) {
@@ -85,5 +111,5 @@ export async function createLab({ width = 1280, height = 720 } = {}) {
     }
     return out;
   }
-  return { view, toon, pose, expr, exprNames, bones, rei, cc, scene, renderer };
+  return { view, toon, pose, expr, exprNames, celSheet, bones, rei, cc, scene, renderer };
 }

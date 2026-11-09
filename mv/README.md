@@ -21,9 +21,18 @@ full mix lines up with it at zero offset.
 - **Performers.** Adachi Rei is the official 3D model ver1.0.0 by みさいる (Mechanical Girl).
   Corrupt-Chan is the fan build from the zip, made by its `cc_build.js`. Both get hard two-tone
   MToon shading with a lavender shadow tint and a constant-width outline (`src/toon.js`).
-- **Poses** are key poses blended on the beat (`src/re/poses.js`): the knee hug of the verses,
-  four one-legged chorus poses with a shout pose on the big words, a hand reaching to the camera,
-  hands on the headset.
+- **Animated like drawings.** The original is limited 2D animation, so this one is too. Each
+  pose is rendered once into a still "drawing" (`src/re/cels.js`). Like the original's cels, the
+  stills are swapped about ten times a second on the beat, shifted around, dropped on the beat
+  and squashed. The chorus cycles four key poses per bar, each with a hand-drawn variant, and
+  switches to a shout pose on the big words. Props move on the same 10 fps clock.
+- **Penlights.** Both singers hold concert penlights (Rei one in each hand, Corrupt-Chan one in
+  her right). The same model, scaled up, is the glowstick shot. Corrupt-Chan's raised leg bends
+  back behind her so it stays inside her skirt.
+- **Verse silhouettes.** As in the original, the sitting singer is a dark silhouette with rim
+  lines in her colour and glowing eyes, cut by a hard diagonal of light. A picture flashes up
+  behind her on each line: sun, moon, clouds, gears, drips, lightning, glitch bars, the other
+  girl's silhouette, and Corrupt-Chan's cracks flooding Rei's panel at the end.
 - **Faces.** As in the official MV there is no lip sync: each pose holds a mouth shape. Named
   expressions set the mood, including Rei's own ＞＜, びっくり, 瞳小 and 瞳ハイライト消, and
   Corrupt-Chan's ＞＜ ("Extra").
@@ -52,18 +61,19 @@ the readme packed with it allows it. `fetch-rei.mjs` downloads it from its publi
 (https://bowlroll.net/file/204581) and checks the MD5 that page lists.
 
 Other modes: `--from 30 --to 42` renders a slice, `--stills 12,33.5,150` saves PNG stills, and
-`--serve` serves the live preview. `node lab.mjs pose:danceA:0 expr:＞＜+aa=0.9 toon:faces`
-renders model test sheets into `out/`.
+`--serve` serves the live preview. `node lab.mjs pose:danceA:0 expr:＞＜+aa=0.9 toon:faces
+cels:rei:R_V,R_spread` renders model test sheets into `out/`.
 
 ### Files
 
 | file | what it does |
 | --- | --- |
 | `src/re/shots.js` | the shot list with times, the chorus cards (chorus 1 timing, repeated 51.2 s and 107.2 s later), subtitles, the second verse's list |
-| `src/re/main.js` | the engine: performers, poses and faces per shot, 3D-into-panel rendering, the shot renderers, the post pass |
+| `src/re/main.js` | the engine: which drawing each shot shows and how it moves, the shot renderers, prop rendering, the post pass |
+| `src/re/cels.js` | drawings: renders and caches a performer in a pose (colour, dark silhouette with rim lines, or flat), penlight glow, eye positions; attaches the penlights |
 | `src/re/draw2d.js` | the 2D layer: chat panels and keyboards, chorus rings and lyric cards, subtitles, call screen, drawn props, credits |
-| `src/re/props.js` | cel-shaded 3D props: TV (and red TV), reaching hand, glowsticks, handset and flip phone, mug, calendar, box on bird legs |
-| `src/re/poses.js` | key poses and pose blending, mirroring and application to VRM bones |
+| `src/re/props.js` | cel-shaded 3D props: TV (and red TV), reaching hand, concert penlight, handset and flip phone, mug, calendar, box on bird legs |
+| `src/re/poses.js` | key poses (verse knee hug, chorus cycles, shouts, close-ups), hand-drawn variants, application to VRM bones |
 | `src/re/palette.js` | colours |
 | `src/rei.js`, `src/toon.js` | Rei's loader; cel shading, outlines and silhouettes |
 | `fetch-rei.mjs` | downloads the official Rei model |
