@@ -9,9 +9,9 @@ Two music videos for the UTAU cover of 次元通信 (Signaling) in `../signaling
 - **The original MV** (`index.html`, Corrupt-Chan × Ping), described further down.
 
 Watch the reanimation in a browser (480p copy, served by jsDelivr from this repo):
-https://cdn.jsdelivr.net/gh/bryanbr0thesigma-droid/FrankenUTAU@1742e191d6824fdf4da1e4efb67e68a9f99d19f5/signaling-reanimation-480p.mp4
+https://cdn.jsdelivr.net/gh/bryanbr0thesigma-droid/FrankenUTAU@c38e9746b88b88fa59e67a61c7c85cb8b584643a/signaling-reanimation-480p.mp4
 Audio alone (MP3), for players that drop the video's sound:
-https://cdn.jsdelivr.net/gh/bryanbr0thesigma-droid/FrankenUTAU@1742e191d6824fdf4da1e4efb67e68a9f99d19f5/signaling-cover-audio.mp3
+https://cdn.jsdelivr.net/gh/bryanbr0thesigma-droid/FrankenUTAU@c38e9746b88b88fa59e67a61c7c85cb8b584643a/signaling-cover-audio.mp3
 
 ## The reanimation
 
