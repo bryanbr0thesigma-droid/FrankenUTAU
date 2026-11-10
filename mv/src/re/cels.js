@@ -31,6 +31,10 @@ export function attachPenlights(b, color, sides, scale = 2.0) {
 
 export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
   const cache = new Map();
+  // rest rotations of the bones a drawing may pose by hand (spec.bones: Corrupt-Chan's skirt)
+  const restQ = new Map();
+  for (const a of Object.values(actors)) a.b.root.traverse((o) => { if (/Skirt/.test(o.name)) restQ.set(o, o.quaternion.clone()); });
+  const _e = new THREE.Euler(), _q = new THREE.Quaternion();
   const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 100);
   const look = new THREE.Object3D(); scene.add(look);
   const v = new THREE.Vector3(), v2 = new THREE.Vector3();
@@ -41,6 +45,74 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     a.holder.updateMatrixWorld(true);
     const y = Math.min(a.H.getRawBoneNode("leftFoot").getWorldPosition(v).y, a.H.getRawBoneNode("rightFoot").getWorldPosition(v2).y);
     a.holder.position.y += a.footY - y;
+  }
+  // Corrupt-Chan curled up: her skirt bones would hang straight down through her raised thighs,
+  // so each is aimed at a point in the world: the front panels over the tops of her knees and down
+  // in front of her shins, the side panels along her thighs (works whatever the bones' axes are)
+  const A1 = new THREE.Vector3(), A2 = new THREE.Vector3(), Aq = new THREE.Quaternion(), Aw = new THREE.Quaternion(), Ap = new THREE.Quaternion();
+  function aim(bone, child, target) {
+    bone.updateWorldMatrix(true, true);
+    bone.getWorldPosition(A1); child.getWorldPosition(A2);
+    const d = A2.sub(A1).normalize(), t = target.clone().sub(A1).normalize();
+    Aq.setFromUnitVectors(d, t);
+    bone.getWorldQuaternion(Aw); bone.parent.getWorldQuaternion(Ap);
+    bone.quaternion.copy(Ap.invert().multiply(Aq.multiply(Aw)));
+    bone.updateMatrixWorld(true);
+  }
+  // ...and her thighs are covered by the dress: an overlay built from the body's thigh triangles
+  // (skinned to the upper legs), pushed out a little and drawn in the dress fabric colour
+  const thighCovers = [];
+  {
+    const a = actors.cc, H = a.H, bodies = [];
+    a.b.root.traverse((o) => { if (o.isSkinnedMesh && !o.userData.isOutline && !o.userData.cover && [].concat(o.material).some((m) => /Body_00_SKIN/.test(m.name))) bodies.push(o); });
+    const mat = new THREE.MeshToonMaterial({ color: 0x26232d });
+    mat.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <skinning_vertex>", "#include <skinning_vertex>\n transformed += normalize(objectNormal) * 0.014;"); };
+    for (const body of bodies) {
+      const bones = body.skeleton.bones;
+      const legIdx = new Set(["leftUpperLeg", "rightUpperLeg"].map((n) => bones.indexOf(H.getRawBoneNode(n))).filter((i) => i >= 0));
+      const geo = body.geometry, si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, idx = geo.index;
+      if (!idx || !legIdx.size) continue;
+      const legW = (v) => { let w = 0; for (let k = 0; k < 4; k++) if (legIdx.has(si.getComponent(v, k))) w += sw.getComponent(v, k); return w; };
+      const tris = [];
+      for (let i = 0; i < idx.count; i += 3) {
+        const v0 = idx.getX(i), v1 = idx.getX(i + 1), v2 = idx.getX(i + 2);
+        if (legW(v0) > 0.45 && legW(v1) > 0.45 && legW(v2) > 0.45) tris.push(v0, v1, v2);
+      }
+      if (!tris.length) continue;
+      const g2 = new THREE.BufferGeometry();
+      for (const [n, at] of Object.entries(geo.attributes)) g2.setAttribute(n, at);
+      g2.setIndex(tris);
+      const cover = new THREE.SkinnedMesh(g2, mat);
+      cover.bind(body.skeleton, body.bindMatrix); cover.bindMode = body.bindMode;
+      cover.frustumCulled = false; cover.visible = false; cover.userData.cover = true;
+      body.parent.add(cover);
+      thighCovers.push(cover);
+    }
+  }
+  function drapeSkirt(a) {
+    const R = a.b.root, H = a.H, up = new THREE.Vector3(0, 1, 0);
+    a.holder.updateMatrixWorld(true);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(a.holder.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
+    const hipsC = H.getRawBoneNode("hips").getWorldPosition(new THREE.Vector3());
+    for (const S of ["L", "R"]) {
+      const side = S === "L" ? "left" : "right";
+      const hip = H.getRawBoneNode(side + "UpperLeg").getWorldPosition(new THREE.Vector3());
+      const knee = H.getRawBoneNode(side + "LowerLeg").getWorldPosition(new THREE.Vector3());
+      const out = hip.clone().sub(hipsC).setY(0).normalize();
+      const b = (n) => R.getObjectByName(`J_Sec_${S}_Skirt${n}`);
+      const f0 = b("Front0"), f1 = b("Front1"), f2 = b("Front2"), f3 = b("Front2_end");
+      if (f0 && f1 && f2 && f3) {
+        aim(f0, f1, knee.clone().addScaledVector(up, 0.07).addScaledVector(fwd, 0.02));
+        aim(f1, f2, knee.clone().addScaledVector(fwd, 0.09).addScaledVector(up, -0.1));
+        aim(f2, f3, f2.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.3).addScaledVector(fwd, 0.03));
+      }
+      const s0 = b("Side0"), s1 = b("Side1"), s2 = b("Side2"), s3 = b("Side2_end");
+      if (s0 && s1 && s2 && s3) {
+        aim(s0, s1, hip.clone().lerp(knee, 0.6).addScaledVector(out, 0.1).addScaledVector(up, 0.02));
+        aim(s1, s2, s1.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.25).addScaledVector(out, 0.04));
+        aim(s2, s3, s2.getWorldPosition(new THREE.Vector3()).addScaledVector(up, -0.3));
+      }
+    }
   }
   function swapDark(root, fill, line, flat) {
     const saved = [];
@@ -152,6 +224,17 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     faceFn(a, spec.mood || {});
     a.vrm.springBoneManager?.reset(); a.b.hairVrm?.springBoneManager?.reset();
     for (let i = 0; i < 36; i++) spec.who === "cc" ? a.b.update(1 / 30, i / 30, { glitch: false }) : a.b.update(1 / 30);
+    // bones posed by hand after the physics has settled (degrees, applied on top of the rest pose)
+    if (spec.bones) {
+      for (const [n, d] of Object.entries(spec.bones)) {
+        const b = a.b.root.getObjectByName(n); if (!b) continue;
+        const q0 = restQ.get(b) || b.quaternion.clone();
+        _e.set(THREE.MathUtils.degToRad(d[0]), THREE.MathUtils.degToRad(d[1]), THREE.MathUtils.degToRad(d[2]));
+        b.quaternion.copy(q0).multiply(_q.setFromEuler(_e));
+      }
+    }
+    if (spec.drape) drapeSkirt(a);
+    for (const c of thighCovers) c.visible = !!spec.drape && spec.who === "cc";
     a.holder.updateMatrixWorld(true);
     outlineUniforms.uRes.value.set(rw, rh);
     outlineUniforms.uOutlinePx.value = spec.outline ?? 1.8;

@@ -103,6 +103,25 @@ export async function createLab({ width = 1280, height = 720 } = {}) {
     });
     return out.toDataURL("image/png");
   }
+  // Corrupt-Chan curled up (the verse), with a skirt drape to test: "f0,f1,f2,s0,s1,b0" in degrees
+  function sitTest(drape) {
+    celSheet("cc", []); // sets up the drawing system
+    const [f0, f1, f2, s0, s1, b0] = drape === "drape" ? [0, 0, 0, 0, 0, 0] : drape.split(",").map(Number);
+    const bones = {};
+    for (const S of ["L", "R"]) {
+      bones[`J_Sec_${S}_SkirtFront0`] = [f0, 0, 0]; bones[`J_Sec_${S}_SkirtFront1`] = [f1, 0, 0]; bones[`J_Sec_${S}_SkirtFront2`] = [f2, 0, 0];
+      bones[`J_Sec_${S}_SkirtSide0`] = [s0, 0, 0]; bones[`J_Sec_${S}_SkirtSide1`] = [s1, 0, 0];
+      bones[`J_Sec_${S}_SkirtBack0`] = [b0, 0, 0];
+    }
+    const out = document.createElement("canvas"); out.width = 760; out.height = 540; const g = out.getContext("2d");
+    g.fillStyle = "#3a1670"; g.fillRect(0, 0, 760, 540);
+    [[-0.42, 0], [0.9, 380]].forEach(([yaw, x]) => {
+      const c = cels.cel({ who: "cc", pose: POSES.sit, mood: {}, yaw, cam: [30, -0.25, 0.86, 2.25, 0, 0.5, 0], w: 508, h: 720, outline: 2.0, ...(drape === "drape" ? { drape: true } : { bones }) });
+      g.drawImage(c.img, x, 0, 380, 540);
+    });
+    g.fillStyle = "#fff"; g.font = "14px sans-serif"; g.fillText(drape, 6, 16);
+    return out.toDataURL("image/png");
+  }
   function bones() {
     const out = {};
     for (const [k, b] of Object.entries({ rei, cc })) {
@@ -111,5 +130,5 @@ export async function createLab({ width = 1280, height = 720 } = {}) {
     }
     return out;
   }
-  return { view, toon, pose, expr, exprNames, celSheet, bones, rei, cc, scene, renderer };
+  return { view, toon, pose, expr, exprNames, celSheet, sitTest, bones, rei, cc, scene, renderer };
 }

@@ -32,6 +32,9 @@ full mix lines up with it at zero offset.
 - **Penlights.** Both singers hold concert penlights (Rei one in each hand, Corrupt-Chan one in
   her right). The same model, scaled up, is the glowstick shot. Corrupt-Chan's raised leg bends
   back behind her so it stays inside her skirt.
+- **Corrupt-Chan's dress when she curls up.** A cloth simulation would drape her dress over her
+  raised knees; here her skirt bones are aimed over her knees and down in front of her shins, and
+  an overlay built from her thigh triangles, in the dress colour, covers her thighs.
 - **Verse silhouettes.** As in the original, the sitting singer is a dark silhouette with clean
   line art in her colour, cut by a hard diagonal of light. The lines come from a
   pass that gives every material its own flat colour, then traces only where two parts meet and

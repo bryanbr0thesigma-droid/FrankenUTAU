@@ -137,6 +137,12 @@ Object.assign(POSES, {
   C_shout: chor(CC_LEGS, [0, -6, 0], { spine: d(-10, 4, 0), chest: d(-8, 4, 0), head: d(-6, -6, 0) }, arm(0.4, -0.7, 0.55, 2.0), arm(1, 0.05, 0.3, 0.3), [0.9, 0.92]),
 });
 
+// both fists clenched in front of her chest (the second verse, "さあ、強く、派手に")
+Object.assign(POSES, {
+  fists: { hips: [0, 0, 0], b: { spine: d(-3, 0, 0), chest: d(-2, 0, 0), head: d(-4, 0, 0) }, arms: { L: arm(0.3, -0.85, 0.3, 1.85, { twist: 0.3 }), R: arm(0.3, -0.85, 0.3, 1.85, { twist: 0.3 }) }, curl: [1, 1] },
+  fists2: { hips: [0, 0, 0], b: { spine: d(-3, 0, 0), chest: d(-2, 0, 0), head: d(-4, 0, 0) }, arms: { L: arm(0.25, -0.9, 0.2, 2.1, { twist: 0.5 }), R: arm(0.25, -0.9, 0.2, 2.1, { twist: 0.5 }) }, curl: [1, 1] },
+});
+
 // a hand-drawn variant of a pose: small deterministic changes (k = 0 is the pose itself)
 export function vary(p, k, amt = 1) {
   if (!k) return p;

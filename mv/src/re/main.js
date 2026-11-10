@@ -252,7 +252,8 @@ export async function createReanim({ container = document.body } = {}) {
   };
   function verseDrawings(who) {
     const P = WHO[who], cc = who === "cc";
-    const base = { who, pose: cc ? POSES.sit : POSES.sitUp, yaw: cc ? -0.42 : 0.42, cam: [30, cc ? -0.25 : 0.25, 0.86, 2.25, 0, 0.5, 0], w: 508, h: 720, pad: 0.04, outline: 2.0 };
+    // drape: Corrupt-Chan's dress over her raised thighs (see cels.js)
+    const base = { who, pose: cc ? POSES.sit : POSES.sitUp, yaw: cc ? -0.42 : 0.42, cam: [30, cc ? -0.25 : 0.25, 0.86, 2.25, 0, 0.5, 0], w: 508, h: 720, pad: 0.04, outline: 2.0, drape: cc };
     return {
       dark: C({ ...base, mood: {}, mode: "dark", fill: hex(P.night), line: hex(cc ? P.text : P.light) }),
       lit: C({ ...base, mood: cc ? { sad: 0.35, blink: 0.25 } : { "困る": 0.6, blink: 0.15 } }),
@@ -322,11 +323,12 @@ export async function createReanim({ container = document.body } = {}) {
       }
       if (local > 4.5) D.checker(g, x0 + 40, 300 + (local - 4.5) * 40, 120, 60, 10);
     }
-    // drawings: the hand comes closer in three steps; the headset pose bobs on the beat
+    // drawings: the hand comes closer in three steps; the fists pose bobs on the beat
     const step = reach ? Math.min(2, Math.floor(local / 1.6)) : 0;
-    const pose = reach ? addPose(POSES.reach, { rightUpperArm: [0, 0, 0], hips_pos: [0, 0, step * 0.0] }) : POSES.headset;
+    const pose = reach ? POSES.reach : POSES[sh.pose];
     const mood = reach ? (local < 2.6 ? { "びっくり": 1, oh: 0.6 } : { happy: 0.45, aa: 0.4 }) : (t < 66.9 ? { happy: 0.6, aa: sub < 2 ? 0.7 : 0.45 } : { "両目見開き": 1, oh: 0.4 });
-    const camSpec = reach ? [24 - step * 1.5, -0.12, 1.48, 1.05, -0.05, 1.43, 0] : [26, 0, 1.15, 1.9, 0, 1.15, 0];
+    // "さあ、強く、派手に": from the knees up, her head and fists in frame, like the original
+    const camSpec = reach ? [24 - step * 1.5, -0.12, 1.48, 1.05, -0.05, 1.43, 0] : [26, 0, 1.08, 2.8, 0, 1.06, 0];
     const dr = C({ who: "rei", pose: vary(pose, sub >= 2 ? 1 : 0, 0.5), mood: { ...mood, goggles: true, ecg: (bi % 4) }, yaw: reach ? 0.15 : 0, cam: camSpec, w: 556, h: 720, pad: 0.06, outline: reach ? 2.8 : 2.2 });
     blit(dr, x0, 0, x1 - x0, H, wobble(bi, sub, reach ? 0.35 : 0.7));
     g.restore();

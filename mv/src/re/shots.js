@@ -69,7 +69,7 @@ export const SHOTS = [
   card(CH1[5]), card(CH1[6]), card(CH1[7]),
   { type: "link", t0: 57.2, t1: 57.7, to: "rei" },
   { type: "close", t0: 57.7, t1: 63.6, pose: "reach" },
-  { type: "close", t0: 63.6, t1: 69.4, pose: "headset" },
+  { type: "close", t0: 63.6, t1: 69.4, pose: "fists" },
   { type: "static", t0: 69.4, t1: 70.9 },
   { type: "prop", t0: 70.9, t1: 73.8, prop: "tvHand" },
   { type: "prop", t0: 73.8, t1: 76.8, prop: "phones" },
