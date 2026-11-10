@@ -5,10 +5,13 @@
 //   node render.mjs --stills 12,31.5,90   PNG stills -> out/still-<t>.png
 //   node render.mjs --jobs 3              split the frames over several browsers
 //   node render.mjs --serve               just serve the live preview page
+//   node render.mjs --splice ../signaling-reanimation.mp4 --redo 5.7-12.9,63.6-69.5
+//                                         re-render only those time ranges and splice them into an
+//                                         earlier render; the rest is stream-copied, untouched
 //   node render.mjs --page index          the earlier original MV (Corrupt-Chan + Ping) instead of the
 //                                         reanimation (reanim.html, the default)
 import { createRequire } from "node:module";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,6 +81,7 @@ async function main() {
     return;
   }
   const info = await (async () => { const b = await launch(); const p = await openPage(b); const r = await p.evaluate(() => ({ frames: MV.frames, fps: MV.fps, duration: MV.duration, cuts: MV.shots.map((s) => s.t0) })); await b.close(); return r; })();
+  if (args.splice) return splice(info);
   const f0 = Math.max(0, Math.round((+args.from || 0) * info.fps));
   const f1 = Math.min(info.frames, args.to ? Math.round(+args.to * info.fps) : info.frames);
   const jobs = Math.max(1, +(args.jobs || 1));
@@ -92,7 +96,7 @@ async function main() {
   bounds.push(f1);
   console.log(`rendering frames ${f0}..${f1 - 1} (${f1 - f0} frames) in ${bounds.length - 1} job(s)`);
   const t0 = Date.now();
-  const parts = await Promise.all(bounds.slice(0, -1).map((a, j) => renderPart(a, bounds[j + 1], j, info.fps, t0)));
+  const parts = await Promise.all(bounds.slice(0, -1).map((a, j) => renderPart(a, bounds[j + 1], j, info.fps, t0, info.cuts)));
   const name = args.out || (args.from || args.to ? `slice-${(f0 / info.fps).toFixed(1)}-${(f1 / info.fps).toFixed(1)}.mp4` : (PAGE === "reanim" ? "signaling-reanimation.mp4" : "signaling-mv.mp4"));
   const outFile = path.join(OUT, name);
   const list = path.join(OUT, "parts.txt");
@@ -105,12 +109,18 @@ async function main() {
   console.log(`done in ${((Date.now() - t0) / 60000).toFixed(1)} min -> ${outFile}`);
 }
 
-async function renderPart(a, b, j, fps, tStart) {
+// a keyframe at every shot start, so a later --splice can cut exactly at any shot
+function keyArgs(a, b, fps, cuts) {
+  const ts = (cuts || []).map((t) => Math.round(t * fps)).filter((f) => f > a && f < b).map((f) => ((f - a) / fps).toFixed(4));
+  return ts.length ? ["-force_key_frames", ts.join(",")] : [];
+}
+async function renderPart(a, b, j, fps, tStart, cuts) {
   const browser = await launch();
   const page = await openPage(browser);
   const file = path.join(OUT, `part-${j}.mp4`);
   const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
-    "-c:v", "libx264", "-preset", args.preset || "medium", "-crf", String(args.crf || 20), "-maxrate", args.maxrate || "4M", "-bufsize", "8M", "-pix_fmt", "yuv420p", "-r", String(fps), file], { stdio: ["pipe", "inherit", "inherit"] });
+    "-c:v", "libx264", "-preset", args.preset || "medium", "-crf", String(args.crf || 20), "-maxrate", args.maxrate || "4M", "-bufsize", "8M", "-pix_fmt", "yuv420p", "-r", String(fps),
+    ...keyArgs(a, b, fps, cuts), file], { stdio: ["pipe", "inherit", "inherit"] });
   const done = new Promise((res, rej) => ff.on("close", (c) => (c === 0 ? res() : rej(new Error("ffmpeg exited " + c)))));
   const q = +(args.quality || 0.95);
   for (let f = a; f < b; f++) {
@@ -126,6 +136,39 @@ async function renderPart(a, b, j, fps, tStart) {
   await done;
   await browser.close();
   return file;
+}
+
+// re-render some time ranges and splice them into an earlier render (same encoder settings).
+// Each range is widened to the earlier render's keyframes, so the untouched stretches between
+// them are copied bit for bit; the audio is muxed again from the full mix.
+async function splice(info) {
+  const base = path.resolve(String(args.splice)), fps = info.fps, N = info.frames;
+  const kf = String(spawnSync("ffprobe", ["-v", "error", "-select_streams", "v", "-skip_frame", "nokey", "-show_entries", "frame=pts_time", "-of", "csv=p=0", base]).stdout)
+    .split(/[\s,]+/).filter(Boolean).map((x) => Math.round(+x * fps));
+  kf.push(N);
+  const ranges = String(args.redo).split(",").map((r) => r.split("-").map(Number)).map(([a, b]) => {
+    const fa = Math.round(a * fps), fb = Math.round(b * fps);
+    return [Math.max(...kf.filter((k) => k <= fa)), Math.min(...kf.filter((k) => k >= fb))];
+  }).sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const r of ranges) { const m = merged[merged.length - 1]; if (m && r[0] <= m[1]) m[1] = Math.max(m[1], r[1]); else merged.push([...r]); }
+  console.log("re-rendering frames", merged.map(([a, b]) => `${a}..${b - 1} (${(a / fps).toFixed(2)}-${(b / fps).toFixed(2)} s)`).join(", "));
+  const t0 = Date.now();
+  const fresh = await Promise.all(merged.map(([a, b], j) => renderPart(a, b, j, fps, t0, info.cuts)));
+  const pieces = []; let at = 0, k = 0;
+  for (const [i, [a, b]] of merged.entries()) {
+    if (a > at) { const seg = path.join(OUT, `keep-${k++}.mp4`); await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (at / fps).toFixed(6), "-i", base, "-frames:v", String(a - at), "-map", "0:v", "-c", "copy", seg]); pieces.push(seg); }
+    pieces.push(fresh[i]); at = b;
+  }
+  if (at < N) { const seg = path.join(OUT, `keep-${k++}.mp4`); await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (at / fps).toFixed(6), "-i", base, "-map", "0:v", "-c", "copy", seg]); pieces.push(seg); }
+  const list = path.join(OUT, "splice.txt"), outFile = path.join(OUT, args.out || "signaling-reanimation.mp4");
+  fs.writeFileSync(list, pieces.map((p) => `file '${p}'`).join("\n"));
+  await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-i", AUDIO,
+    "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", "-shortest", outFile]);
+  for (const p of pieces) fs.unlinkSync(p);
+  fs.unlinkSync(list);
+  const frames = String(spawnSync("ffprobe", ["-v", "error", "-count_packets", "-select_streams", "v", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", outFile]).stdout).trim();
+  console.log(`spliced in ${((Date.now() - t0) / 60000).toFixed(1)} min -> ${outFile} (${frames} frames, expected ${N})`);
 }
 
 function run(cmd, a) {

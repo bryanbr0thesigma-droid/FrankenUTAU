@@ -77,6 +77,10 @@ The Rei model isn't kept in git. Its VRM metadata says redistribution is prohibi
 the readme packed with it allows it. `fetch-rei.mjs` downloads it from its public BowlRoll page
 (https://bowlroll.net/file/204581) and checks the MD5 that page lists.
 
+To change a few shots, re-render only those and splice them into the last render (the rest is
+copied bit for bit; every render puts a keyframe at each shot start so cuts land cleanly):
+`node render.mjs --splice ../signaling-reanimation.mp4 --redo 5.7-12.85,63.6-69.4 --crf 22 --maxrate 3M`.
+
 Other modes: `--from 30 --to 42` renders a slice, `--stills 12,33.5,150` saves PNG stills, and
 `--serve` serves the live preview. `node lab.mjs pose:danceA:0 expr:＞＜+aa=0.9 toon:faces
 cels:rei:R_V,R_spread` renders model test sheets into `out/`.
