@@ -190,6 +190,8 @@ export async function createReanim({ container = document.body } = {}) {
   }
   R.card = (sh, t, S) => {
     const c = sh.card, who = c.who, L = CARD_LAYOUT[who], P = WHO[who], beat = tl.beatF(t);
+    // the "< Hello?" cut-in: black, the message, black, then the card again
+    if (c.hello && t >= c.hello[0] && t < c.hello[3]) { if (t >= c.hello[1] && t < c.hello[2]) D.helloScreen(g); return; }
     const { dx, alpha } = slide(sh, t);
     g.globalAlpha = alpha;
     const [cx0, cx1] = L.char.map((x) => x + dx), [tx0, tx1] = L.text.map((x) => x + dx);
@@ -464,7 +466,6 @@ export async function createReanim({ container = document.body } = {}) {
   };
   R.heartGlitch = (sh, t, S) => { D.heartGlitch(g, t - sh.t0); S.post.glitch = 0.4; S.post.ca = 0.006; };
   R.code = (sh, t, S) => { D.codeScreen(g, t - sh.t0); S.post.scan = 0.15; S.post.glitch = hash1(Math.floor(t * 10)) > 0.8 ? 0.3 : 0; };
-  R.hello = (sh, t) => D.helloScreen(g, t - sh.t0);
   R.credit = (sh, t, S) => {
     const local = t - sh.t0, rei = sh.who === "rei", [x0, x1] = rei ? [80, 700] : [580, 1200];
     const a = clamp(local / 0.25) * clamp((sh.t1 - sh.t0 - local) / 0.2);

@@ -285,12 +285,14 @@ export function linkLine(g, k, to) {
   g.beginPath(); g.moveTo(0, 360); g.lineTo(x, 360); g.stroke(); g.setLineDash([]);
   g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 12; g.beginPath(); g.arc(x, 360, 4, 0, TAU); g.fill(); g.shadowBlur = 0;
 }
-export function helloScreen(g, local) {
-  const grd = g.createLinearGradient(640, 0, 1280, 0);
-  grd.addColorStop(0, "#232a74"); grd.addColorStop(1, "rgba(10,6,32,0)");
-  g.fillStyle = grd; g.fillRect(640, 0, 640, 360);
-  g.globalAlpha = clamp(local / 0.1); g.font = `500 26px ${JP}`; g.textAlign = "left"; g.textBaseline = "middle"; g.fillStyle = "#c9d4ff";
-  g.fillText("< Hello?", 660, 180); g.globalAlpha = 1;
+// "< Hello?": a message on its own, a blue gradient down the left edge (matches the original)
+export function helloScreen(g) {
+  const grd = g.createLinearGradient(0, 0, 440, 0);
+  grd.addColorStop(0, "#202462"); grd.addColorStop(0.45, "#1b1c56"); grd.addColorStop(1, "rgba(9,4,35,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 440, H);
+  g.textAlign = "left"; g.textBaseline = "middle"; g.fillStyle = "#9db6ff";
+  g.font = `400 34px ${JP}`; g.fillText("<", 34, 360);
+  g.font = `400 46px ${JP}`; g.fillText("Hello?", 72, 362);
 }
 
 // ---------- drawn props ----------

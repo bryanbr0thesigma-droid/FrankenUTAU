@@ -13,7 +13,8 @@ const CH1 = [
   { who: "cc", t0: 41.7, t1: 44.75, lines: [[42.15, "いつもオ", "c"], [42.6, "フライン", "W"], [43.4, "返信は", "c"], [44.0, "一生来ない", "w"]] },
   { who: "rei", t0: 44.8, t1: 46.7, special: true, lines: [[45.0, "こだまのない", "c"], [46.0, "叫び", "W"], [46.4, "FOR YOU", "L"]] },
   { who: "cc", t0: 48.15, t1: 51.2, lines: [[48.25, "平行線か", "c"], [48.9, "独りか", "W"], [50.5, "終わりない待機", "s"]] },
-  { who: "rei", t0: 51.2, t1: 54.45, lines: [[52.0, "おい,", "c"], [53.0, "今どこだ?", "W"], [53.7, "手を振ってみてよ", "sc"]] },
+  // the card is cut into: black, "< Hello?", black, then it comes back (as in the original)
+  { who: "rei", t0: 51.2, t1: 54.45, hello: [51.533, 51.667, 51.9, 52.0], lines: [[51.3, "おい,", "c"], [52.0, "今どこだ?", "W"], [53.7, "手を振ってみてよ", "sc"]] },
   { who: "cc", t0: 54.5, t1: 57.2, special: true, lines: [[54.95, "あの,", "c"], [55.2, "生きてるよね?", "w"], [56.2, "もう一度だけ", "s"]] },
 ];
 
@@ -21,6 +22,7 @@ function shift(card, dt, patch = {}) {
   return { // patch times are in chorus-1 time, like the card's
     ...card, ...patch, t0: (patch.t0 ?? card.t0) + dt, t1: (patch.t1 ?? card.t1) + dt,
     lines: (patch.lines || card.lines).map(([t, s, k, t2]) => [t + dt, s, k, t2 !== undefined ? t2 + dt : undefined]),
+    hello: (patch.hello || card.hello)?.map((t) => t + dt),
   };
 }
 const L = (t, s, k, t2) => [t, s, k, t2];
@@ -101,8 +103,7 @@ export const SHOTS = [
   card(CH3[3]),
   { type: "link", t0: 153.9, t1: 155.35, to: "cc" },
   card(CH3[4]),
-  { type: "hello", t0: 158.4, t1: 159.2 },
-  { ...card(CH3[5]), t0: 159.2 },
+  card(CH3[5]),
   card(CH3[6]),
   { type: "link", t0: 164.4, t1: 164.8, to: "rei" },
   { type: "credit", t0: 164.8, t1: 168.0, who: "rei", pose: "danceB", roles: ["Producer", "Composition", "Lyrics", "Arrangement", "by"], name: "AnythingBecomeMoe" },
