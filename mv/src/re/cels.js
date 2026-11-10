@@ -141,15 +141,19 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     applyPose(a.vrm, spec.pose);
     a.holder.position.set(spec.x || 0, 0, 0); a.holder.rotation.set(0, spec.yaw || 0, 0);
     placeOnFloor(a);
+    // pad: a margin round the panel (a fraction of its size), rendered with a matching wider field
+    // of view, so the drawing can shift and squash in its panel without showing its edge
     const [fov, px, py, pz, lx, ly, lz] = spec.cam;
-    cam.fov = fov; cam.aspect = spec.w / spec.h; cam.position.set(px, py, pz); cam.lookAt(lx, ly, lz); cam.updateProjectionMatrix();
+    const pad = spec.pad || 0, k = 1 + 2 * pad, rw = Math.round(spec.w * k), rh = Math.round(spec.h * k);
+    cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * k));
+    cam.aspect = spec.w / spec.h; cam.position.set(px, py, pz); cam.lookAt(lx, ly, lz); cam.updateProjectionMatrix();
     look.position.copy(cam.position);
     if (a.vrm.lookAt) a.vrm.lookAt.target = look;
     faceFn(a, spec.mood || {});
     a.vrm.springBoneManager?.reset(); a.b.hairVrm?.springBoneManager?.reset();
     for (let i = 0; i < 36; i++) spec.who === "cc" ? a.b.update(1 / 30, i / 30, { glitch: false }) : a.b.update(1 / 30);
     a.holder.updateMatrixWorld(true);
-    outlineUniforms.uRes.value.set(spec.w, spec.h);
+    outlineUniforms.uRes.value.set(rw, rh);
     outlineUniforms.uOutlinePx.value = spec.outline ?? 1.8;
     // faces for the later choruses: "blank" (features gone) or "void" (the face filled black)
     const faceUndo = [];
@@ -172,13 +176,13 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     let img;
     if (spec.mode === "dark") {
       const restore = swapID(a.b.root);
-      const idc = renderTo(spec.w, spec.h);
+      const idc = renderTo(rw, rh);
       restore();
       img = traceLines(idc, spec.fill, spec.line);
     } else {
       let restore = null;
       if (spec.mode === "flat") restore = swapDark(a.b.root, spec.fill, spec.fill, true);
-      img = renderTo(spec.w, spec.h);
+      img = renderTo(rw, rh);
       if (restore) restore();
     }
     for (const u of faceUndo.reverse()) u();
@@ -187,9 +191,9 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     if (spec.sticks && spec.mode !== "dark" && spec.mode !== "flat" && (a.sticks || []).length) {
       const hidden = [];
       scene.traverse((o) => { if (o.isMesh && o.visible && !o.userData.blade) { hidden.push(o); o.visible = false; } });
-      const raw = renderTo(spec.w, spec.h);
+      const raw = renderTo(rw, rh);
       for (const o of hidden) o.visible = true;
-      glow = document.createElement("canvas"); glow.width = spec.w >> 1; glow.height = spec.h >> 1;
+      glow = document.createElement("canvas"); glow.width = rw >> 1; glow.height = rh >> 1;
       const gg = glow.getContext("2d"); gg.filter = "blur(5px)"; gg.drawImage(raw, 0, 0, glow.width, glow.height); gg.filter = "blur(2px)"; gg.drawImage(raw, 0, 0, glow.width, glow.height);
     }
     // eye positions (for the glowing eyes of the dark verse look)
@@ -197,9 +201,9 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     for (const n of ["leftEye", "rightEye"]) {
       const b = a.H.getRawBoneNode(n); if (!b) continue;
       b.getWorldPosition(v).project(cam);
-      eyes.push([(v.x + 1) / 2 * spec.w, (1 - v.y) / 2 * spec.h]);
+      eyes.push([(v.x + 1) / 2 * rw, (1 - v.y) / 2 * rh]);
     }
-    const r = { img, glow, eyes, w: spec.w, h: spec.h };
+    const r = { img, glow, eyes, w: rw, h: rh, pad };
     cache.set(key, r); stats.made++;
     if (cache.size > max) cache.delete(cache.keys().next().value);
     return r;

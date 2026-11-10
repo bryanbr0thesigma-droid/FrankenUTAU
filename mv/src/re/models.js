@@ -1,7 +1,8 @@
 // The props of the monitor shots, built from 3moji models (CC BY-SA 4.0, see models/3moji/):
 // the TV (with colour bars on its screen), the hand reaching out of it, the red TV (its screen a
 // mouth with a hand clawing out), the phone handset and the broken smartphone, the can and the red
-// plug, and the tear-off calendar. The box on bird legs is built here from plain geometry.
+// plug, and the tear-off calendar. The can's opening and lid, and the box on bird legs, are built
+// here from plain geometry.
 // The models are toon-shaded and outlined like everything else, and recoloured where needed.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -91,8 +92,8 @@ function recolorAtlas(root, pairs, tol = 6) {
 }
 
 export async function buildModelProps(gl) {
-  const [tvA, tvB, handA, recv, phone, can, cal, plugM, claw] = await Promise.all(
-    ["television", "television", "raised_hand", "telephone_receiver", "mobile_phone", "canned_food", "tearoff_calendar", "electric_plug", "hand_with_fingers_splayed"].map(load));
+  const [tvA, tvB, handA, recv, phone, cal, plugM, claw] = await Promise.all(
+    ["television", "television", "raised_hand", "telephone_receiver", "mobile_phone", "tearoff_calendar", "electric_plug", "hand_with_fingers_splayed"].map(load));
 
   // ---------- TVs ----------
   const tv = normalize(toonify(tvA), 1.9);
@@ -176,16 +177,22 @@ export async function buildModelProps(gl) {
 
   // ---------- the bridge's props (white and grey, red accents) ----------
   const GREY = 0xdedce6, GREY2 = 0x8d8a99, RED = 0xe0222f;
-  // a white can lying on its side, its flip lid open, the red plug lying on the floor beside it
+  // a white can lying on its side, its flip lid open, the red plug lying on the floor beside it.
+  // The can is hollow (a lathed wall with thickness, a rolled rim, two ribs, a dark inside), so
+  // its open end reads as an opening; the lid is a lipped disc on a hinge at the rim.
   const cupG = new THREE.Group();
-  const canM = normalize(toonify(can, { solid: GREY }), 0.7);
-  const cb = new THREE.Box3().setFromObject(canM), r = (cb.max.x - cb.min.x) / 2, top = cb.max.y;
-  const hole = new THREE.Mesh(new THREE.CircleGeometry(r * 0.86, 40), new THREE.MeshBasicMaterial({ color: 0x141218 }));
-  hole.rotation.x = -Math.PI / 2; hole.position.y = top + 0.002; hole.userData.noOutline = true; canM.add(hole);
-  const lidHinge = new THREE.Group(); lidHinge.position.set(r * 0.98, top, 0); canM.add(lidHinge);
-  const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.97, r * 0.97, 0.045, 40), toon(GREY)); lid.position.set(-r * 0.97, 0.02, 0); lidHinge.add(lid);
+  const R = 0.3, Hc = 0.74, T = 0.03, V = (x, y) => new THREE.Vector2(x, y);
+  const canM = new THREE.Group();
+  canM.add(new THREE.Mesh(new THREE.LatheGeometry([V(0, 0), V(R - 0.03, 0), V(R, 0.03), V(R, Hc - 0.015), V(R + 0.014, Hc), V(R - T, Hc + 0.002)], 56), toon(GREY)));
+  const inside = new THREE.Mesh(new THREE.LatheGeometry([V(R - T, Hc), V(R - T, 0.05), V(0.001, 0.05)], 56), toon(0x34323c, { side: THREE.DoubleSide }));
+  inside.userData.noOutline = true; canM.add(inside);
+  for (const yy of [Hc * 0.3, Hc * 0.62]) { const rib = new THREE.Mesh(new THREE.TorusGeometry(R + 0.002, 0.011, 8, 56), toon(GREY)); rib.rotation.x = Math.PI / 2; rib.position.y = yy; canM.add(rib); }
+  const lidHinge = new THREE.Group(); lidHinge.position.set(R, Hc + 0.004, 0); canM.add(lidHinge);
+  const lid = new THREE.Mesh(new THREE.LatheGeometry([V(0, 0), V(R + 0.012, 0), V(R + 0.02, 0.018), V(R + 0.006, 0.036), V(0.001, 0.036)], 56), toon(GREY));
+  lid.position.set(-R - 0.01, 0, 0); lidHinge.add(lid);
+  const tab = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.03, 0.12, 2, 0.01), toon(GREY2)); tab.position.set(0.005, 0.01, 0); lidHinge.add(tab);
   lidHinge.rotation.z = -1.95;
-  canM.rotation.set(0, 0, Math.PI / 2); canM.position.set(0.25, r, 0); // on its side, open end to the camera's left
+  canM.rotation.set(0, 0, Math.PI / 2); canM.position.set(0.25, R + 0.014, 0); // on its side
   const can2 = new THREE.Group(); can2.add(canM); can2.rotation.y = 0.75; can2.position.x = 0.3; cupG.add(can2); // open end towards the camera
   const plug = normalize(toonify(plugM, { solid: RED }), 0.42);
   plug.rotation.set(0.3, 0.6, Math.PI / 2 + 0.2); plug.position.set(-0.6, 0.08, 0.15); cupG.add(plug);
@@ -199,21 +206,32 @@ export async function buildModelProps(gl) {
   const pb = new THREE.Box3().setFromObject(calG);
   const page = new THREE.Mesh(new THREE.PlaneGeometry((pb.max.x - pb.min.x) * 0.7, (pb.max.y - pb.min.y) * 0.62), new THREE.MeshBasicMaterial({ map: pageT.tex, transparent: true }));
   page.position.set(0, pb.min.y + (pb.max.y - pb.min.y) * 0.36, 0.06); page.userData.noOutline = true; calG.add(page);
-  // the box: a plain box whose lid flaps open, on grey bird legs, a red antenna from inside
+  // the box: an open box (walls with thickness, a dark floor inside) whose tray-shaped lid flaps
+  // open, on jointed grey bird legs, a red antenna coming out of it
   const box = new THREE.Group();
-  const bw = 1.0, bh = 0.78, bd = 0.9;
-  const body = new THREE.Mesh(new RoundedBoxGeometry(bw, bh, bd, 2, 0.025), toon(GREY)); body.position.y = 0.62 + bh / 2; box.add(body);
-  const hinge = new THREE.Group(); hinge.position.set(0, 0.62 + bh, -bd / 2); box.add(hinge);
-  const lidB = new THREE.Mesh(new RoundedBoxGeometry(bw + 0.08, 0.16, bd + 0.08, 2, 0.02), toon(GREY)); lidB.position.set(0, 0.06, bd / 2); hinge.add(lidB);
-  const tube = (pts, rr, col) => new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((pp) => new THREE.Vector3(...pp))), 16, rr, 8, false), toon(col));
+  const bw = 1.0, bh = 0.72, bd = 0.86, t = 0.035, y0 = 0.62;
+  const slab = (w, h, d, x, y, z, col = GREY) => { const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.008), toon(col)); m.position.set(x, y, z); return m; };
+  box.add(slab(bw, t, bd, 0, y0 + t / 2, 0));
+  box.add(slab(bw, bh, t, 0, y0 + bh / 2, bd / 2 - t / 2), slab(bw, bh, t, 0, y0 + bh / 2, -bd / 2 + t / 2));
+  box.add(slab(t, bh, bd - 2 * t, bw / 2 - t / 2, y0 + bh / 2, 0), slab(t, bh, bd - 2 * t, -bw / 2 + t / 2, y0 + bh / 2, 0));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(bw - 2 * t, bd - 2 * t), new THREE.MeshBasicMaterial({ color: 0x2e2c36 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = y0 + t + 0.002; box.add(floor);
+  const hinge = new THREE.Group(); hinge.position.set(0, y0 + bh, -bd / 2 - 0.03); box.add(hinge);
+  const lw = bw + 0.06, ld = bd + 0.06, sk = 0.12;
+  hinge.add(slab(lw, t, ld, 0, t / 2, ld / 2));
+  hinge.add(slab(lw, sk, t, 0, t - sk / 2, ld - t / 2), slab(lw, sk, t, 0, t - sk / 2, t / 2));
+  hinge.add(slab(t, sk, ld, lw / 2 - t / 2, t - sk / 2, ld / 2), slab(t, sk, ld, -lw / 2 + t / 2, t - sk / 2, ld / 2));
+  const tube = (pts, rr, col) => new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((pp) => new THREE.Vector3(...pp))), 20, rr, 10, false), toon(col));
+  const joint = (pp, rr) => { const m = new THREE.Mesh(new THREE.SphereGeometry(rr, 14, 10), toon(GREY2)); m.position.set(...pp); return m; };
   for (const sg of [-1, 1]) { // bird legs, splayed out to the sides
-    const hip = [sg * 0.42, 0.66, 0.05], knee = [sg * 0.78, 0.4, 0.15], ankle = [sg * 0.88, 0.06, 0.08];
-    box.add(tube([hip, knee, ankle], 0.04, GREY2));
-    for (const a of [-0.8, 0, 0.8]) box.add(tube([ankle, [ankle[0] + sg * (0.12 + Math.cos(a) * 0.16), 0.02, ankle[2] + Math.sin(a) * 0.28]], 0.026, GREY2));
+    const hip = [sg * 0.44, 0.68, 0.05], knee = [sg * 0.8, 0.42, 0.16], ankle = [sg * 0.9, 0.07, 0.08];
+    box.add(tube([hip, knee], 0.042, GREY2), tube([knee, ankle], 0.034, GREY2), joint(knee, 0.055), joint(ankle, 0.045));
+    for (const a of [-0.85, 0, 0.85]) box.add(tube([ankle, [ankle[0] + sg * (0.1 + Math.cos(a) * 0.17), 0.02, ankle[2] + Math.sin(a) * 0.3]], 0.024, GREY2));
+    box.add(tube([ankle, [ankle[0] - sg * 0.04, 0.02, ankle[2] - 0.2]], 0.02, GREY2));
   }
-  const ant = new THREE.Group(); ant.position.set(0.3, 0.62 + bh - 0.05, 0.1); ant.rotation.set(0.25, 0, -0.6); box.add(ant);
-  ant.add(tube([[0, 0, 0], [0.02, 0.45, 0], [0, 0.9, 0]], 0.014, RED));
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), new THREE.MeshBasicMaterial({ color: RED })); tip.position.y = 0.92; ant.add(tip);
+  const ant = new THREE.Group(); ant.position.set(0.28, y0 + bh * 0.6, 0.08); ant.rotation.set(0.25, 0, -0.55); box.add(ant);
+  ant.add(tube([[0, 0, 0], [0.02, 0.5, 0], [0, 1.0, 0]], 0.014, RED));
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), new THREE.MeshBasicMaterial({ color: RED })); tip.position.y = 1.02; ant.add(tip);
   box.userData.lid = hinge;
 
   const P = { tv, tvRed, hand, phones, cup: cupG, calendar: calG, boxbird: box };

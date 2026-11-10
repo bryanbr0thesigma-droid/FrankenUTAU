@@ -522,17 +522,6 @@ export function glowEyes(g, pts, col, r = 6) {
   }
 }
 
-// a red scribble over a face (chorus 3: Rei's face crossed out)
-export function scribble(g, cx, cy, r, seed) {
-  g.save(); g.strokeStyle = "#e3102e"; g.lineWidth = 6; g.lineJoin = "round"; g.lineCap = "round";
-  g.shadowColor = "#ff2040"; g.shadowBlur = 8; g.beginPath();
-  for (let i = 0; i < 46; i++) {
-    const a = hash2(i, seed) * TAU, rr_ = r * (0.25 + 0.75 * hash2(i + 9, seed));
-    const x = cx + Math.cos(a) * rr_ * 1.25, y = cy + Math.sin(a) * rr_ * 0.85;
-    i ? g.lineTo(x, y) : g.moveTo(x, y);
-  }
-  g.stroke(); g.restore();
-}
 // tears streaming from the eyes
 export function tears(g, pts, len, phase) {
   g.save(); g.strokeStyle = "rgba(190,235,255,0.9)"; g.lineWidth = 5; g.lineCap = "round";

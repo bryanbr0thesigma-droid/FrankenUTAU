@@ -26,7 +26,8 @@ full mix lines up with it at zero offset.
 - **Animated like drawings.** The original is limited 2D animation, so this one is too. Each
   pose is rendered once into a still "drawing" (`src/re/cels.js`). Like the original's cels, the
   stills are swapped about ten times a second on the beat, shifted around, dropped on the beat
-  and squashed. The chorus cycles four key poses per bar, each with a hand-drawn variant, and
+  and squashed. Drawings are rendered with a margin round their panel, so this movement never
+  shows their edge. The chorus cycles four key poses per bar, each with a hand-drawn variant, and
   switches to a shout pose on the big words. Props move on the same 10 fps clock.
 - **Penlights.** Both singers hold concert penlights (Rei one in each hand, Corrupt-Chan one in
   her right). The same model, scaled up, is the glowstick shot. Corrupt-Chan's raised leg bends
@@ -39,17 +40,18 @@ full mix lines up with it at zero offset.
   panel at the end.
 - **Props** are 3moji models (`models/3moji/`, CC BY-SA 4.0, credited in the video), toon-shaded
   and recoloured: the TV with colour bars, the hand pushing out of its screen, the red TV whose
-  screen is a mouth with a hand clawing out, the handset and the cracked smartphone, the can lying
-  open with the red plug beside it, and the tear-off calendar with its red "1". The box on bird
-  legs, with its flapping lid, is plain geometry.
+  screen is a mouth with a hand clawing out, the handset and the cracked smartphone, the red plug,
+  and the tear-off calendar with its red "1". The hollow can lying open with its flip lid, and the
+  open box on bird legs with its flapping lid, are built from plain geometry.
 - **Faces.** As in the official MV there is no lip sync: each pose holds a mouth shape. Named
   expressions set the mood, including Rei's own ＞＜, びっくり, 瞳小 and 瞳ハイライト消, and
   Corrupt-Chan's ＞＜ ("Extra").
 - **The later choruses.** As in the original, the singers stop looking normal. In chorus 2,
   Corrupt-Chan is a washed-out, faceless, pixelated ghost. In chorus 3, her face is a black void
   and she breaks up (bigger pixels, colour split, scanlines, slices), and her lines arrive faded.
-  Rei comes apart in chorus 3: wide-eyed shock, then crying (＞＜ with tears), then her face
-  crossed out in red on "おい、今どこだ？", in front of a wall of windows.
+  Rei comes apart in chorus 3: wide-eyed shock, then crying (＞＜ with tears), then an unhinged,
+  lifeless pinprick stare that flickers to rolled-back whites on "おい、今どこだ？", in front of a
+  wall of windows.
 - **Lyrics** are shown as in the official MV: chat bubbles, chorus cards, the typed list of the
   second verse, and subtitles in the monitor shots.
 

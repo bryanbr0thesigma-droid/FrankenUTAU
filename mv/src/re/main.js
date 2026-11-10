@@ -23,6 +23,7 @@ import { REI, CC, WHO, BG, YELLOW, hex, rgba } from "./palette.js";
 import { clamp, easeOut, easeIn, hash1, hash2, frac } from "../util.js";
 
 const W = 1280, H = 720;
+const GLW = 1600, GLH = 1000; // the WebGL canvas: drawings with a margin are taller than the frame
 const CC_DIR = "./assets/signaling/corrupt-chan-3d/";
 const T10 = (t) => Math.floor(t * 10 + 1e-6) / 10; // the drawing clock: ten drawings a second
 
@@ -35,7 +36,7 @@ export async function createReanim({ container = document.body } = {}) {
 
   // ---------- canvases ----------
   const gl = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-  gl.setPixelRatio(1); gl.setSize(W, H); gl.setClearColor(0x000000, 0);
+  gl.setPixelRatio(1); gl.setSize(GLW, GLH); gl.setClearColor(0x000000, 0);
   const comp = document.createElement("canvas"); comp.width = W; comp.height = H;
   const g = comp.getContext("2d");
   const tmp = document.createElement("canvas"); const tg = tmp.getContext("2d");
@@ -74,7 +75,7 @@ export async function createReanim({ container = document.body } = {}) {
     goggles.visible = !!mood.goggles;
     if (mood.goggles) goggles.userData.draw(mood.ecg || 0);
   }
-  const cels = createCels({ gl, H, actors, scene, faceFn });
+  const cels = createCels({ gl, H: GLH, actors, scene, faceFn });
   const C = (spec) => cels.cel(spec);
 
   // ---------- props ----------
@@ -94,7 +95,7 @@ export async function createReanim({ container = document.body } = {}) {
     camera.aspect = rect.w / rect.h; camera.updateProjectionMatrix();
     outlineUniforms.uRes.value.set(rect.w, rect.h);
     outlineUniforms.uOutlinePx.value = o.outline ?? 1.8;
-    gl.setScissorTest(true); gl.setViewport(0, H - rect.h, rect.w, rect.h); gl.setScissor(0, H - rect.h, rect.w, rect.h);
+    gl.setScissorTest(true); gl.setViewport(0, GLH - rect.h, rect.w, rect.h); gl.setScissor(0, GLH - rect.h, rect.w, rect.h);
     gl.clear(true, true, true); gl.render(sc, camera); gl.setScissorTest(false);
     g.drawImage(gl.domElement, 0, 0, rect.w, rect.h, rect.x, rect.y, rect.w, rect.h);
     if (o.bloom) {
@@ -103,7 +104,10 @@ export async function createReanim({ container = document.body } = {}) {
     }
   }
   // draw a drawing into a box (x, y, w, h), transformed about its bottom centre
+  // draw a drawing into a panel box (x, y, w, h), transformed about the box's bottom centre; a
+  // drawing with a margin (c.pad) overhangs the box by that much on every side
   function blit(c, x, y, w, h, o = {}) {
+    const p = c.pad || 0, dw = w * (1 + 2 * p), dh = h * (1 + 2 * p), ox = -w / 2 - w * p, oy = -h - h * p;
     g.save();
     if (o.clip) { g.beginPath(); o.clip(g); g.clip(); }
     g.translate(x + w / 2 + (o.dx || 0), y + h + (o.dy || 0));
@@ -113,19 +117,20 @@ export async function createReanim({ container = document.body } = {}) {
     if (o.filter) g.filter = o.filter;
     let src = c.img;
     if (o.pixel > 1) { // Corrupt-Chan's corruption: rendered coarse, scaled up without smoothing
-      tmp.width = Math.ceil(w / o.pixel); tmp.height = Math.ceil(h / o.pixel);
+      tmp.width = Math.ceil(dw / o.pixel); tmp.height = Math.ceil(dh / o.pixel);
       tg.imageSmoothingEnabled = true; tg.clearRect(0, 0, tmp.width, tmp.height); tg.drawImage(c.img, 0, 0, tmp.width, tmp.height);
       g.imageSmoothingEnabled = false; src = tmp;
     }
-    g.drawImage(src, -w / 2, -h, w, h);
+    g.drawImage(src, ox, oy, dw, dh);
     g.imageSmoothingEnabled = true; g.filter = "none";
-    if (c.glow && o.glow !== 0) { g.globalCompositeOperation = "lighter"; g.globalAlpha = (o.alpha ?? 1) * (o.glow ?? 1); g.drawImage(c.glow, -w / 2, -h, w, h); }
-    if (o.bloom) { g.globalCompositeOperation = "lighter"; g.globalAlpha = (o.alpha ?? 1) * o.bloom; g.filter = "blur(12px)"; g.drawImage(c.img, -w / 2, -h, w, h); }
+    if (c.glow && o.glow !== 0) { g.globalCompositeOperation = "lighter"; g.globalAlpha = (o.alpha ?? 1) * (o.glow ?? 1); g.drawImage(c.glow, ox, oy, dw, dh); }
+    if (o.bloom) { g.globalCompositeOperation = "lighter"; g.globalAlpha = (o.alpha ?? 1) * o.bloom; g.filter = "blur(12px)"; g.drawImage(c.img, ox, oy, dw, dh); }
     g.restore();
   }
   // where pixel p of drawing c lands when blitted into (x, y, w, h) with options o
   function mapPt(c, x, y, w, h, o, [px, py]) {
-    const lx = ((px / c.w) * w - w / 2) * (o.sx || 1), ly = ((py / c.h) * h - h) * (o.sy || 1), r = o.rot || 0;
+    const p = c.pad || 0, dw = w * (1 + 2 * p), dh = h * (1 + 2 * p);
+    const lx = ((px / c.w) * dw - w / 2 - w * p) * (o.sx || 1), ly = ((py / c.h) * dh - h - h * p) * (o.sy || 1), r = o.rot || 0;
     return [x + w / 2 + (o.dx || 0) + lx * Math.cos(r) - ly * Math.sin(r), y + h + (o.dy || 0) + lx * Math.sin(r) + ly * Math.cos(r)];
   }
   function sliceGlitch(x, y, w, h, seed, amount) {
@@ -148,27 +153,31 @@ export async function createReanim({ container = document.body } = {}) {
   const CHORUS_CAM = [28, 0, 1.02, 3.75, 0, 0.9, 0];
   function chorusDrawing(who, t, card, extra = {}) {
     const tq = T10(t), beat = tl.beatF(tq + 1e-4), bi = Math.floor(beat), sub = Math.floor((beat - bi) * 4) & 3;
-    const crying = who === "rei" && card?.ch === 3 && card.lines[0][1].startsWith("こだま");
-    const shout = !crying && card && card.lines.some(([lt, , k]) => k === "W" && tq >= lt && tq < lt + 0.8);
+    // in chorus 3 Rei's crying and unhinged cards keep her face in view (no fist-to-mouth shout)
+    const faceCard = who === "rei" && card?.ch === 3 && /^(こだま|おい)/.test(card.lines[0][1]);
+    const shout = !faceCard && card && card.lines.some(([lt, , k]) => k === "W" && tq >= lt && tq < lt + 0.8);
     const name = shout ? (who === "rei" ? "R_shout" : "C_shout") : CYCLE[who][((bi % 4) + 4) % 4];
     const v = sub >= 2 ? 1 + (((bi % 3) + 3) % 3) : 0;
     let mood = who === "rei" ? (v ? { happy: 0.3, oh: 0.45 } : { happy: 0.3, aa: 0.65 }) : (v ? { relaxed: 0.25, oh: 0.4 } : { relaxed: 0.3, aa: 0.55 });
     if (card?.dim && who === "cc") mood = { sad: 0.6, blink: 0.3, oh: 0.15 };
     else if (card?.special && who === "cc") mood = { sad: 0.5, oh: v ? 0.2 : 0.35 };
     if (shout) mood = who === "rei" ? { "＞＜": 1, aa: 1 } : { Extra: 1, aa: 1 };
-    // chorus 3: Rei comes apart: shock, then crying, then her face crossed out in red
+    // chorus 3: Rei comes apart: shock, then crying, then an unhinged dead stare
     let fx = null;
     if (who === "rei" && card?.ch === 3) {
       const first = card.lines[0][1];
       if (first.startsWith("虚空")) mood = { "瞳小": 1, "両目見開き": 1, oh: 0.6 };
       else if (first.startsWith("こだま")) { mood = { "＞＜": 1, sad: 0.6, aa: 0.9 }; fx = "tears"; }
-      else if (first.startsWith("おい")) { mood = { "瞳ハイライト消": 1, aa: 0.7 }; fx = "scribble"; }
+      else if (first.startsWith("おい")) { // unhinged: a dead, pinprick stare, flickering to rolled-back whites
+        mood = sub === 2 && bi % 2 ? { "白目": 1, aa: 0.9 } : { "瞳ハイライト消": 1, "瞳小": 1, "両目見開き": 1, aa: 1 };
+        fx = "unhinged";
+      }
     }
     if (extra.mood) mood = extra.mood;
     // Corrupt-Chan in choruses 2 and 3: a blank-faced ghost, then a void where her face was
     const face = who === "cc" && card?.ch >= 2 ? (card.ch === 2 ? "blank" : "void") : undefined;
     if (face) mood = { ...mood, Extra: 0, "＞＜": 0 };
-    const c = C({ who, pose: vary(POSES[name], v), mood, yaw: who === "rei" ? 0.22 : -0.22, cam: CHORUS_CAM, w: 510, h: 720, sticks: shout ? "left" : true, face });
+    const c = C({ who, pose: vary(POSES[name], v), mood, yaw: who === "rei" ? 0.22 : -0.22, cam: CHORUS_CAM, w: 510, h: 720, pad: 0.08, sticks: shout ? "left" : true, face });
     return { c, bi, sub, fx };
   }
 
@@ -202,10 +211,11 @@ export async function createReanim({ container = document.body } = {}) {
     if (fx) { // marks drawn on Rei's face, following the drawing
       const eyes = dr.eyes.map((p) => mapPt(dr, cx0, 0, cx1 - cx0, H, opt, p));
       if (fx === "tears") D.tears(g, eyes, 70, f10);
-      if (fx === "scribble" && eyes.length === 2) D.scribble(g, (eyes[0][0] + eyes[1][0]) / 2, (eyes[0][1] + eyes[1][1]) / 2 + 8, 46, f10);
+
     }
     g.restore();
     if (corrupt) sliceGlitch(cx0, 0, cx1 - cx0, H, Math.floor(t * 12), void3 ? 0.75 : 0.35);
+    if (fx === "unhinged") sliceGlitch(cx0, 0, cx1 - cx0, H, Math.floor(t * 10) + 7, 0.3);
     D.ringOverlay(g, cx0, cx1, who, (t - sh.t0) / (sh.t1 - sh.t0), L.inner);
     D.panel(g, tx0, tx1);
     D.pieIcon(g, (tx0 + tx1) / 2, 100, 24, beat, c.special ? YELLOW : "#ffffff");
@@ -220,7 +230,7 @@ export async function createReanim({ container = document.body } = {}) {
     const blur = sh.intro ? 5 : 14 * (1 - easeOut(local / 0.7));
     D.ringPanel(g, 96, 606, "rei", t, beat, { sparkle: !sh.intro });
     const { c: dr, bi, sub } = sh.intro
-      ? { c: C({ who: "rei", pose: POSES.R_V, mood: {}, yaw: 0.22, cam: CHORUS_CAM, w: 510, h: 720, mode: "flat", fill: hex(REI.deep) }), bi: 0, sub: 2 }
+      ? { c: C({ who: "rei", pose: POSES.R_V, mood: {}, yaw: 0.22, cam: CHORUS_CAM, w: 510, h: 720, pad: 0.08, mode: "flat", fill: hex(REI.deep) }), bi: 0, sub: 2 }
       : chorusDrawing("rei", t, null, { mood: { happy: 0.4, aa: 0.6 } });
     g.save(); g.beginPath(); g.rect(96, 0, 510, H); g.clip();
     blit(dr, 96, 0, 510, H, { ...wobble(bi, sub, sh.intro ? 0.4 : 1), filter: blur > 0.5 ? `blur(${blur}px)` : null, bloom: 0.5 });
@@ -242,7 +252,7 @@ export async function createReanim({ container = document.body } = {}) {
   };
   function verseDrawings(who) {
     const P = WHO[who], cc = who === "cc";
-    const base = { who, pose: cc ? POSES.sit : POSES.sitUp, yaw: cc ? -0.42 : 0.42, cam: [30, cc ? -0.25 : 0.25, 0.86, 2.25, 0, 0.5, 0], w: 508, h: 720, outline: 2.0 };
+    const base = { who, pose: cc ? POSES.sit : POSES.sitUp, yaw: cc ? -0.42 : 0.42, cam: [30, cc ? -0.25 : 0.25, 0.86, 2.25, 0, 0.5, 0], w: 508, h: 720, pad: 0.04, outline: 2.0 };
     return {
       dark: C({ ...base, mood: {}, mode: "dark", fill: hex(P.night), line: hex(cc ? P.text : P.light) }),
       lit: C({ ...base, mood: cc ? { sad: 0.35, blink: 0.25 } : { "困る": 0.6, blink: 0.15 } }),
@@ -317,7 +327,7 @@ export async function createReanim({ container = document.body } = {}) {
     const pose = reach ? addPose(POSES.reach, { rightUpperArm: [0, 0, 0], hips_pos: [0, 0, step * 0.0] }) : POSES.headset;
     const mood = reach ? (local < 2.6 ? { "びっくり": 1, oh: 0.6 } : { happy: 0.45, aa: 0.4 }) : (t < 66.9 ? { happy: 0.6, aa: sub < 2 ? 0.7 : 0.45 } : { "両目見開き": 1, oh: 0.4 });
     const camSpec = reach ? [24 - step * 1.5, -0.12, 1.48, 1.05, -0.05, 1.43, 0] : [26, 0, 1.15, 1.9, 0, 1.15, 0];
-    const dr = C({ who: "rei", pose: vary(pose, sub >= 2 ? 1 : 0, 0.5), mood: { ...mood, goggles: true, ecg: (bi % 4) }, yaw: reach ? 0.15 : 0, cam: camSpec, w: 556, h: 720, outline: reach ? 2.8 : 2.2 });
+    const dr = C({ who: "rei", pose: vary(pose, sub >= 2 ? 1 : 0, 0.5), mood: { ...mood, goggles: true, ecg: (bi % 4) }, yaw: reach ? 0.15 : 0, cam: camSpec, w: 556, h: 720, pad: 0.06, outline: reach ? 2.8 : 2.2 });
     blit(dr, x0, 0, x1 - x0, H, wobble(bi, sub, reach ? 0.35 : 0.7));
     g.restore();
     D.panel(g, 722, 1158);
@@ -460,7 +470,7 @@ export async function createReanim({ container = document.body } = {}) {
     // the silhouette dances: it changes pose every two beats
     const seq = rei ? ["R_spread", "R_V", "R_lean"] : ["C_spread", "C_up", "C_spreadHi"];
     const pose = POSES[seq[Math.floor(bi / 2) % 3]];
-    const dr = C({ who: sh.who, pose, mood: {}, yaw: rei ? 0.22 : -0.22, cam: [28, 0, 1.0, 4.3, 0, 0.92, 0], w: 620, h: 720, mode: "flat", fill: hex(WHO[sh.who].sil) });
+    const dr = C({ who: sh.who, pose, mood: {}, yaw: rei ? 0.22 : -0.22, cam: [28, 0, 1.0, 4.3, 0, 0.92, 0], w: 620, h: 720, pad: 0.06, mode: "flat", fill: hex(WHO[sh.who].sil) });
     blit(dr, x0, 0, x1 - x0, H, { ...wobble(bi, sub, 0.5), alpha: a });
     D.creditText(g, sh, local, rei ? "right" : "left");
     S.post.glow = 0.3;
