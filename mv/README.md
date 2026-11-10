@@ -32,14 +32,16 @@ full mix lines up with it at zero offset.
   her right). The same model, scaled up, is the glowstick shot. Corrupt-Chan's raised leg bends
   back behind her so it stays inside her skirt.
 - **Verse silhouettes.** As in the original, the sitting singer is a dark silhouette with clean
-  line art in her colour and glowing eyes, cut by a hard diagonal of light. The lines come from a
+  line art in her colour, cut by a hard diagonal of light. The lines come from a
   pass that gives every material its own flat colour, then traces only where two parts meet and
   the outer edge. A picture flashes up behind her on each line: sun, moon, clouds, gears, drips,
   lightning, glitch bars, the other girl's silhouette, and Corrupt-Chan's cracks flooding Rei's
   panel at the end.
 - **Props** are 3moji models (`models/3moji/`, CC BY-SA 4.0, credited in the video), toon-shaded
-  and recoloured: the TV with colour bars, the red TV, the hand pushing out of the screen, the
-  handset and the cracked smartphone, the cup, the tear-off calendar, and the box on bird legs.
+  and recoloured: the TV with colour bars, the hand pushing out of its screen, the red TV whose
+  screen is a mouth with a hand clawing out, the handset and the cracked smartphone, the can lying
+  open with the red plug beside it, and the tear-off calendar with its red "1". The box on bird
+  legs, with its flapping lid, is plain geometry.
 - **Faces.** As in the official MV there is no lip sync: each pose holds a mouth shape. Named
   expressions set the mood, including Rei's own ＞＜, びっくり, 瞳小 and 瞳ハイライト消, and
   Corrupt-Chan's ＞＜ ("Extra").

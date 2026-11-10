@@ -1,9 +1,11 @@
 // The props of the monitor shots, built from 3moji models (CC BY-SA 4.0, see models/3moji/):
-// the TV (with colour bars on its screen), the red TV, the hand reaching out of it, the phone
-// handset and the broken smartphone, the cup, the tear-off calendar and the box on bird legs.
+// the TV (with colour bars on its screen), the hand reaching out of it, the red TV (its screen a
+// mouth with a hand clawing out), the phone handset and the broken smartphone, the can and the red
+// plug, and the tear-off calendar. The box on bird legs is built here from plain geometry.
 // The models are toon-shaded and outlined like everything else, and recoloured where needed.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { addOutlines } from "../toon.js";
 import { toon } from "./props.js";
 import { REI, CC, hex } from "./palette.js";
@@ -70,9 +72,27 @@ function screenOver(g, box, tex, inset = 0.0, lift = 0.004) {
   return p;
 }
 
-export async function buildModelProps() {
-  const [tvA, tvB, handA, handB, recv, phone, cup, cal, pkg] = await Promise.all(
-    ["television", "television", "raised_hand", "raised_hand", "telephone_receiver", "mobile_phone", "hot_beverage", "tearoff_calendar", "package"].map(load));
+// copy a model's atlas with some colours replaced ([from rgb, to rgb], exact within tol)
+function recolorAtlas(root, pairs, tol = 6) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material.map) return;
+    const src = o.material.map, img = src.image, c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+    const id = x.getImageData(0, 0, c.width, c.height), d = id.data;
+    for (let i = 0; i < d.length; i += 4) for (const [f, t] of pairs) {
+      if (Math.abs(d[i] - f[0]) + Math.abs(d[i + 1] - f[1]) + Math.abs(d[i + 2] - f[2]) <= tol) { d[i] = t[0]; d[i + 1] = t[1]; d[i + 2] = t[2]; break; }
+    }
+    x.putImageData(id, 0, 0);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = src.colorSpace; tex.flipY = src.flipY;
+    tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;
+    o.material.map = tex; o.material.needsUpdate = true;
+  });
+}
+
+export async function buildModelProps(gl) {
+  const [tvA, tvB, handA, recv, phone, can, cal, plugM, claw] = await Promise.all(
+    ["television", "television", "raised_hand", "telephone_receiver", "mobile_phone", "canned_food", "tearoff_calendar", "electric_plug", "hand_with_fingers_splayed"].map(load));
 
   // ---------- TVs ----------
   const tv = normalize(toonify(tvA), 1.9);
@@ -95,7 +115,35 @@ export async function buildModelProps() {
     tex.needsUpdate = true;
   }
   tv.userData.drawScreen = (t, mode) => drawScreen(bars, t, mode, false);
-  tvRed.userData.drawScreen = (t, mode) => drawScreen(off, t, mode, true);
+  // the red TV's screen is a mouth ("君を喰らったTV"): rows of black teeth and a black hand
+  // clawing out of the throat. The hand is the 3moji splayed hand rendered once as a silhouette.
+  const clawImg = (() => {
+    const sc = new THREE.Scene(), h = normalize(toonify(claw, { solid: 0x000000 }), 1);
+    h.traverse((o) => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color: 0x0a0002 }); });
+    h.rotation.set(0.25, 0, -0.35); sc.add(h);
+    const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 20); cam.position.set(0, 0.5, 2.3); cam.lookAt(0, 0.5, 0);
+    const S = 256, Hh = gl.domElement.height;
+    gl.setScissorTest(true); gl.setViewport(0, Hh - S, S, S); gl.setScissor(0, Hh - S, S, S);
+    gl.clear(true, true, true); gl.render(sc, cam); gl.setScissorTest(false);
+    const c = document.createElement("canvas"); c.width = c.height = S;
+    c.getContext("2d").drawImage(gl.domElement, 0, 0, S, S, 0, 0, S, S);
+    return c;
+  })();
+  function drawMouth(t) {
+    const { c, g: x, tex } = off, W = c.width, H = c.height, f = Math.floor(t * 10);
+    x.fillStyle = "#c80f1e"; x.fillRect(0, 0, W, H);
+    x.fillStyle = "#0a0002";
+    const tooth = (tx, ty, tw, th, down) => { x.beginPath(); if (down) { x.moveTo(tx, ty); x.lineTo(tx + tw, ty); x.lineTo(tx + tw, ty + th - tw / 2); x.arc(tx + tw / 2, ty + th - tw / 2, tw / 2, 0, Math.PI); } else { x.moveTo(tx, ty + th); x.lineTo(tx + tw, ty + th); x.lineTo(tx + tw, ty + tw / 2); x.arc(tx + tw / 2, ty + tw / 2, tw / 2, 0, Math.PI, true); } x.closePath(); x.fill(); };
+    for (let i = 0; i < 6; i++) tooth(18 + i * 38, 8, 24, 48 + (i % 2) * 12 + Math.sin(i * 2.1) * 6, true);
+    for (let i = 0; i < 6; i++) tooth(22 + i * 38, H - 44 - (i % 2) * 6, 24, 38 + (i % 2) * 6, false);
+    // the throat and the hand clawing out of it, twitching with the drawings
+    x.beginPath(); x.ellipse(W * 0.5, H * 0.66, 40, 28, 0, 0, Math.PI * 2); x.fill();
+    const s = 230 + (f % 2) * 10, j = (f % 3) - 1;
+    x.drawImage(clawImg, W * 0.52 - s / 2 + j * 3, H * 0.47 - s / 2 + j * 2, s, s);
+    for (let i = 0; i < 26; i++) { const yy = (Math.sin(i * 91.7 + f * 13.1) * 0.5 + 0.5) * H; x.fillStyle = `rgba(0,0,0,${0.08 + 0.06 * (i % 3)})`; x.fillRect(0, yy, W, 2); }
+    tex.needsUpdate = true;
+  }
+  tvRed.userData.drawScreen = (t) => drawMouth(t);
   tv.userData.screen = tvScreen; tvRed.userData.screen = redScreen;
   tv.userData.screenBox = screenBox;
 
@@ -106,7 +154,7 @@ export async function buildModelProps() {
     arm.rotation.x = Math.PI / 2; arm.position.set(0, 0.06, -0.45); h.add(arm);
     return h;
   };
-  const hand = mkHand(handA, hex(CC.light)), handRed = mkHand(handB, 0xff2a3a);
+  const hand = mkHand(handA, hex(CC.light));
 
   // ---------- phones: the handset in Rei's colour, the smartphone in Corrupt-Chan's, cracked ----------
   const phones = new THREE.Group();
@@ -126,28 +174,49 @@ export async function buildModelProps() {
   phones.add(hs, ph);
   phones.userData.parts = { hs, fp: ph };
 
-  // ---------- the bridge's props ----------
-  const cupG = normalize(toonify(cup), 1.25);
-  const cable = [[0.15, 0.55, 0.05], [0.0, 0.95, 0.1], [-0.4, 0.85, 0.15], [-0.6, 0.3, 0.25], [-0.7, 0.02, 0.4], [-1.2, 0.0, 0.5], [-1.7, 0.02, 0.45]].map((p) => new THREE.Vector3(...p));
-  cupG.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cable), 60, 0.03, 8, false), toon(0xe0222f)));
-  const plug = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.09, 0.11), toon(0xe0222f)); plug.position.set(-1.78, 0.04, 0.45); cupG.add(plug);
+  // ---------- the bridge's props (white and grey, red accents) ----------
+  const GREY = 0xdedce6, GREY2 = 0x8d8a99, RED = 0xe0222f;
+  // a white can lying on its side, its flip lid open, the red plug lying on the floor beside it
+  const cupG = new THREE.Group();
+  const canM = normalize(toonify(can, { solid: GREY }), 0.7);
+  const cb = new THREE.Box3().setFromObject(canM), r = (cb.max.x - cb.min.x) / 2, top = cb.max.y;
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(r * 0.86, 40), new THREE.MeshBasicMaterial({ color: 0x141218 }));
+  hole.rotation.x = -Math.PI / 2; hole.position.y = top + 0.002; hole.userData.noOutline = true; canM.add(hole);
+  const lidHinge = new THREE.Group(); lidHinge.position.set(r * 0.98, top, 0); canM.add(lidHinge);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.97, r * 0.97, 0.045, 40), toon(GREY)); lid.position.set(-r * 0.97, 0.02, 0); lidHinge.add(lid);
+  lidHinge.rotation.z = -1.95;
+  canM.rotation.set(0, 0, Math.PI / 2); canM.position.set(0.25, r, 0); // on its side, open end to the camera's left
+  const can2 = new THREE.Group(); can2.add(canM); can2.rotation.y = 0.75; can2.position.x = 0.3; cupG.add(can2); // open end towards the camera
+  const plug = normalize(toonify(plugM, { solid: RED }), 0.42);
+  plug.rotation.set(0.3, 0.6, Math.PI / 2 + 0.2); plug.position.set(-0.6, 0.08, 0.15); cupG.add(plug);
+  cupG.userData.lid = lidHinge;
+  // the tear-off calendar: dark top block, a page with a big red "1" and cracks across it
+  recolorAtlas(cal, [[[238, 63, 58], [52, 50, 60]], [[255, 255, 255], [52, 50, 60]], [[33, 33, 33], [254, 235, 237]]]);
   const calG = normalize(toonify(cal), 1.5);
+  const pageT = canvasTex(256, 256);
+  { const x = pageT.g; x.clearRect(0, 0, 256, 256); x.fillStyle = "#d4111f"; x.font = "900 220px 'Noto Sans JP'"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("1", 128, 140);
+    x.strokeStyle = "#2a2430"; x.lineWidth = 3; x.beginPath(); x.moveTo(150, 0); x.lineTo(138, 60); x.lineTo(176, 110); x.lineTo(160, 180); x.lineTo(200, 256); x.moveTo(176, 110); x.lineTo(240, 128); x.moveTo(40, 30); x.lineTo(70, 50); x.lineTo(60, 80); x.stroke(); pageT.tex.needsUpdate = true; }
+  const pb = new THREE.Box3().setFromObject(calG);
+  const page = new THREE.Mesh(new THREE.PlaneGeometry((pb.max.x - pb.min.x) * 0.7, (pb.max.y - pb.min.y) * 0.62), new THREE.MeshBasicMaterial({ map: pageT.tex, transparent: true }));
+  page.position.set(0, pb.min.y + (pb.max.y - pb.min.y) * 0.36, 0.06); page.userData.noOutline = true; calG.add(page);
+  // the box: a plain box whose lid flaps open, on grey bird legs, a red antenna from inside
   const box = new THREE.Group();
-  const pkgG = normalize(toonify(pkg), 1.05);
-  pkgG.position.y = 1.1; box.add(pkgG);
-  const tube = (pts, r, col) => new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 16, r, 8, false), toon(col));
-  for (const s of [-1, 1]) { // bird legs
-    const hip = [s * 0.25, 1.12, 0.1], knee = [s * 0.5, 0.62, 0.25], ankle = [s * 0.42, 0.08, 0.12];
-    box.add(tube([hip, knee, ankle], 0.035, 0x8d8a99));
-    for (const a of [-0.7, 0, 0.7]) box.add(tube([ankle, [ankle[0] + Math.sin(a) * 0.28 + s * 0.04, 0.02, ankle[2] + Math.cos(a) * 0.28]], 0.022, 0x8d8a99));
-    box.add(tube([ankle, [ankle[0] - s * 0.05, 0.02, ankle[2] - 0.22]], 0.02, 0x8d8a99));
+  const bw = 1.0, bh = 0.78, bd = 0.9;
+  const body = new THREE.Mesh(new RoundedBoxGeometry(bw, bh, bd, 2, 0.025), toon(GREY)); body.position.y = 0.62 + bh / 2; box.add(body);
+  const hinge = new THREE.Group(); hinge.position.set(0, 0.62 + bh, -bd / 2); box.add(hinge);
+  const lidB = new THREE.Mesh(new RoundedBoxGeometry(bw + 0.08, 0.16, bd + 0.08, 2, 0.02), toon(GREY)); lidB.position.set(0, 0.06, bd / 2); hinge.add(lidB);
+  const tube = (pts, rr, col) => new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((pp) => new THREE.Vector3(...pp))), 16, rr, 8, false), toon(col));
+  for (const sg of [-1, 1]) { // bird legs, splayed out to the sides
+    const hip = [sg * 0.42, 0.66, 0.05], knee = [sg * 0.78, 0.4, 0.15], ankle = [sg * 0.88, 0.06, 0.08];
+    box.add(tube([hip, knee, ankle], 0.04, GREY2));
+    for (const a of [-0.8, 0, 0.8]) box.add(tube([ankle, [ankle[0] + sg * (0.12 + Math.cos(a) * 0.16), 0.02, ankle[2] + Math.sin(a) * 0.28]], 0.026, GREY2));
   }
-  const ant = new THREE.Group(); ant.position.set(0.25, 2.1, 0.1); ant.rotation.set(0.3, 0, -0.55); box.add(ant);
-  ant.add(tube([[0, 0, 0], [0, 0.85, 0]], 0.014, 0xe0222f));
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), new THREE.MeshBasicMaterial({ color: 0xe0222f })); tip.position.y = 0.88; ant.add(tip);
-  box.userData.pkg = pkgG;
+  const ant = new THREE.Group(); ant.position.set(0.3, 0.62 + bh - 0.05, 0.1); ant.rotation.set(0.25, 0, -0.6); box.add(ant);
+  ant.add(tube([[0, 0, 0], [0.02, 0.45, 0], [0, 0.9, 0]], 0.014, RED));
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), new THREE.MeshBasicMaterial({ color: RED })); tip.position.y = 0.92; ant.add(tip);
+  box.userData.lid = hinge;
 
-  const P = { tv, tvRed, hand, handRed, phones, cup: cupG, calendar: calG, boxbird: box };
-  for (const [k, g] of Object.entries(P)) { addOutlines(g, { color: k === "tvRed" || k === "handRed" ? 0x050000 : 0x140c26 }); g.visible = false; }
+  const P = { tv, tvRed, hand, phones, cup: cupG, calendar: calG, boxbird: box };
+  for (const [k, g] of Object.entries(P)) { addOutlines(g, { color: k === "tvRed" ? 0x050000 : 0x140c26 }); g.visible = false; }
   return P;
 }

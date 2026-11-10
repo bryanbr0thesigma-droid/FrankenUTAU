@@ -10,8 +10,7 @@ runtime (`../../src/re/models.js`).
 | --- | --- |
 | television.glb | the TV shots (colour bars, the hand reaching out, the red TV) |
 | raised_hand.glb | the hand reaching out of the TV |
+| hand_with_fingers_splayed.glb | the hand clawing out of the red TV's mouth (as a silhouette) |
 | telephone_receiver.glb, mobile_phone.glb | the broken phones |
-| hot_beverage.glb | the cup in the bridge |
-| tearoff_calendar.glb | the tear-off calendar |
-| package.glb | the box on bird legs |
-| telephone.glb | (spare) |
+| canned_food.glb, electric_plug.glb | the can lying open on its side, and the red plug beside it |
+| tearoff_calendar.glb | the tear-off calendar (page and header recoloured, a red "1" laid over the page) |

@@ -78,7 +78,7 @@ export async function createReanim({ container = document.body } = {}) {
   const C = (spec) => cels.cel(spec);
 
   // ---------- props ----------
-  const props = await buildModelProps();
+  const props = await buildModelProps(gl);
   const propScene = new THREE.Scene();
   propScene.add(new THREE.AmbientLight(0xffffff, 0.9));
   const pkey = new THREE.DirectionalLight(0xffffff, 2.0); pkey.position.set(-2, 3, 4); propScene.add(pkey);
@@ -272,8 +272,6 @@ export async function createReanim({ container = document.body } = {}) {
       const [ax, ay, bx, by] = cc ? [0.85, 0.05, 0.05, 0.8] : [0.9, 0.08, 0.05, 0.85];
       const diag = (gg) => { gg.moveTo(x0 + w * ax, H * ay); gg.lineTo(x1 + 60, H * ay); gg.lineTo(x1 + 60, H + 10); gg.lineTo(x0 - 60, H + 10); gg.lineTo(x0 - 60, H * by); gg.lineTo(x0 + w * bx, H * by); gg.closePath(); };
       blit(lit, box.x, box.y, box.w, box.h, { dy: bob, clip: diag });
-      const eyes = dark.eyes.map(([ex, ey]) => [box.x + (ex / dark.w) * box.w, box.y + (ey / dark.h) * box.h + bob]);
-      D.glowEyes(g, eyes, cc ? P.text : P.light, 6 * zoom);
       if (m && m[2] === "drips") D.drips(g, x0 + w * 0.45, 230, tq - m[0], P.text);
     }
     if (m && m[2] === "cracks") D.motif(g, "cracks", x0, x1, who, tq - m[0]);
@@ -350,15 +348,22 @@ export async function createReanim({ container = document.body } = {}) {
     switch (sh.prop) {
       case "tv": case "tvHand": case "tvRed": {
         const red = sh.prop === "tvRed", tv = red ? props.tvRed : props.tv;
-        D.stageFloor(g, x0, x1, red ? "#3a0a0e" : "#e9e4ff");
-        const hand = red ? props.handRed : props.hand;
-        showProp(red ? "tvRed" : "tv", ...(sh.prop !== "tv" ? [red ? "handRed" : "hand"] : []));
-        tv.position.set(0, -0.95 + (sub === 0 ? -0.03 : 0), 0); tv.rotation.set(0.05, -0.18 + Math.sin(local * 0.7) * 0.05, 0);
+        if (red) { // red roots spreading from under the TV
+          g.strokeStyle = "#b80e1c"; g.lineCap = "round";
+          for (let i = 0; i < 9; i++) {
+            let x = 560 + i * 20, y = 540; g.lineWidth = 7 - (i % 3) * 2; g.beginPath(); g.moveTo(x, y);
+            for (let k = 0; k < 6; k++) { x += (i - 4) * 14 + (hash2(i, k) - 0.5) * 30; y += 30 + hash2(k, i) * 12; g.lineTo(x, y); }
+            g.stroke();
+          }
+        } else D.stageFloor(g, x0, x1, "#e9e4ff");
+        const hand = props.hand;
+        showProp(red ? "tvRed" : "tv", ...(sh.prop === "tvHand" ? ["hand"] : []));
+        tv.position.set(0, -0.95 + (sub === 0 ? -0.03 : 0), 0); tv.rotation.set(0.05, red ? -0.05 : -0.18 + Math.sin(local * 0.7) * 0.05, 0);
         tv.userData.drawScreen(tq, sh.prop === "tv" ? "bars" : "off");
-        if (sh.prop !== "tv") {
+        if (sh.prop === "tvHand") {
           // the hand pushes out through the middle of the screen
           const sb = props.tv.userData.screenBox, sc = sb.getCenter(new THREE.Vector3());
-          const ext = red ? 0.12 + 0.05 * Math.sin(local * 5) : 0.05 + 0.55 * easeOut(local / 1.6);
+          const ext = 0.05 + 0.55 * easeOut(local / 1.6);
           hand.position.set(sc.x - 0.04 + Math.sin(local * 3) * 0.03, sc.y - 0.33, sb.max.z + ext); hand.rotation.set(-0.15 + Math.sin(local * 4) * 0.06, -0.12, Math.sin(local * 2.5) * 0.08);
           hand.position.applyEuler(tv.rotation); hand.position.add(tv.position);
           hand.rotation.y += tv.rotation.y;
@@ -387,13 +392,13 @@ export async function createReanim({ container = document.body } = {}) {
       }
       case "cup": case "calendar": case "boxbird": {
         g.fillStyle = "#3a3842"; g.beginPath(); g.moveTo(x0, H * 0.62); g.lineTo(x1, H * 0.55); g.lineTo(x1, H); g.lineTo(x0, H); g.closePath(); g.fill();
-        g.fillStyle = "rgba(0,0,0,0.45)"; g.beginPath(); g.ellipse(640, H * 0.74, 190, 40, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "rgba(0,0,0,0.45)"; g.beginPath(); if (sh.prop === "cup") g.ellipse(690, H * 0.68, 160, 30, 0, 0, Math.PI * 2); else g.ellipse(640, H * 0.74, 190, 40, 0, 0, Math.PI * 2); g.fill();
         showProp(sh.prop);
         const p = props[sh.prop];
-        p.position.set(0, sh.prop === "boxbird" ? -1.3 + (sub === 0 ? 0 : 0.05) : -0.55, 0);
-        if (sh.prop === "cup") p.rotation.set(0.15, -0.5 + local * 0.08, 0);
-        if (sh.prop === "calendar") p.rotation.set(0.25, -0.35 + Math.sin(local * 0.6) * 0.06, 0);
-        if (sh.prop === "boxbird") { p.rotation.set(0.1, -0.6 + Math.sin(local) * 0.15, 0); p.userData.pkg.rotation.z = (sub % 2 ? 1 : -1) * 0.04; }
+        p.position.set(0, sh.prop === "boxbird" ? -1.05 + (sub === 0 ? 0 : 0.05) : sh.prop === "cup" ? -0.3 : -0.55, 0);
+        if (sh.prop === "cup") { p.rotation.set(0.2, -0.2 + local * 0.05, 0); p.userData.lid.rotation.z = -1.95 + (sub === 0 ? 0.12 : 0); }
+        if (sh.prop === "calendar") p.rotation.set(-0.85, -0.5 + Math.sin(local * 0.6) * 0.05, -0.12);
+        if (sh.prop === "boxbird") { p.rotation.set(0.12, -0.55 + Math.sin(local) * 0.12, 0); p.userData.lid.rotation.x = -(sub % 2 ? 0.95 : 0.35); }
         if (sh.prop === "boxbird") camProp(5.4, 0.2, -0.05); else camProp(4.0, 0.3, 0.0);
         render3D(propScene, cam, rect, { outline: 2.0 });
         break;
