@@ -1,5 +1,9 @@
 """Turn a pitch track plus word alignment into quantized SynthV notes with English lyrics.
 Usage: python -I transcribe.py f0.npz align.json grid.npy out.json [novelty.npy]
+--step sets the grid (default 0.25 = sixteenths); 0.0833 suits songs that mix triplet and straight feels.
+grid.npy is [first beat, seconds per beat] (tempo.py) or, for a song that changes tempo, the time of
+every beat (beatmap.py): notes then snap to the local beat and land in the project at their real times
+on a steady 120 BPM grid ("b0"/"b1"), with their musical beats kept as "mb0"/"mb1".
 
 For each lyric line, syllable starts are picked from onset evidence in the audio (voicing starting
 after a consonant, loudness dips, pitch steps) by dynamic programming: exactly as many starts as the
@@ -10,13 +14,36 @@ import numpy as np
 import pronouncing
 
 STEP = 0.25                                    # quantize to sixteenths (beats)
+if "--step" in sys.argv:                       # e.g. --step 0.0833: twelfths, for shuffle/triplet feels
+    i = sys.argv.index("--step"); STEP = float(sys.argv[i + 1]); del sys.argv[i:i + 2]
 SPECIAL = {"uhh": 1, "ohh": 1, "wanna": 2, "gonna": 2, "gotta": 2}
 LAMBDA = 2.0                                   # cost per second of distance from the aligner's guess
 MIN_GAP = 0.08                                 # shortest syllable (s)
 SQUEEZE = 0.6                                  # cost per halving of a syllable's expected length
 
 f0d = np.load(sys.argv[1]); A = json.load(open(sys.argv[2])); words = A["words"]
-off, per = [float(x) for x in np.load(sys.argv[3])]
+grid = np.load(sys.argv[3]).astype(float)
+if len(grid) > 2:
+    # a tempo map: the time of every beat (songs that speed up or slow down). Notes snap to sixteenths
+    # of the local beat, then go into the project at their real times on a steady 120 BPM grid.
+    BEATS = grid
+    ibi0, ibi1 = BEATS[1] - BEATS[0], BEATS[-1] - BEATS[-2]
+    def t2b(x):
+        x = np.asarray(x, float)
+        b = np.interp(x, BEATS, np.arange(len(BEATS)))
+        b = np.where(x < BEATS[0], (x - BEATS[0]) / ibi0, b)
+        return np.where(x > BEATS[-1], len(BEATS) - 1 + (x - BEATS[-1]) / ibi1, b)
+    def b2t(b):
+        b = np.asarray(b, float)
+        x = np.interp(b, np.arange(len(BEATS)), BEATS)
+        x = np.where(b < 0, BEATS[0] + b * ibi0, x)
+        return np.where(b > len(BEATS) - 1, BEATS[-1] + (b - len(BEATS) + 1) * ibi1, x)
+    off, per = float(BEATS[0]), float(np.median(np.diff(BEATS)))
+else:
+    BEATS = None
+    off, per = [float(x) for x in grid]
+    t2b = lambda x: (np.asarray(x, float) - off) / per
+    b2t = lambda b: off + np.asarray(b, float) * per
 t, f0, pr, rms = f0d["t"], f0d["f0"], f0d["per"], f0d["rms"]
 dt = float(t[1] - t[0]); T = len(t)
 db = 20 * np.log10(rms + 1e-9)
@@ -195,11 +222,11 @@ for li in lines:
 # quantize. Detected starts include the consonant sung before each note (SynthV starts a note at its
 # vowel), so they run early by a steady amount; measure it over the song and shift it out before
 # rounding, or starts sitting halfway between grid lines round apart and squash syllables together.
-ph = np.array([(nt["t0"] - off) / per / STEP for nt in notes if nt["lyric"] != "-"])
+ph = np.array([float(t2b(nt["t0"])) / STEP for nt in notes if nt["lyric"] != "-"])
 LEAD = -float(np.angle(np.mean(np.exp(2j * np.pi * ph))) / (2 * np.pi)) * STEP * per
 for nt in notes:
-    nt["b0"] = round((nt["t0"] + LEAD - off) / per / STEP) * STEP
-    nt["b1"] = round((nt["t1"] + LEAD - off) / per / STEP) * STEP
+    nt["b0"] = round(float(t2b(nt["t0"] + LEAD)) / STEP) * STEP
+    nt["b1"] = round(float(t2b(nt["t1"] + LEAD)) / STEP) * STEP
 for i, nt in enumerate(notes):
     if i and nt["b0"] < notes[i - 1]["b0"] + STEP:
         nt["b0"] = notes[i - 1]["b0"] + STEP
@@ -247,13 +274,13 @@ for i, nt in enumerate(notes):
         # a word ending in a hard consonant already separates itself (SynthV sings that consonant at
         # the end of the note); ending it early only made the consonant cut the vowel short
         art = None if not soft_end(nt["word"]) else rest_start(nt["t0"] + 0.05, nxt["t0"] + 0.03, ART_DB, ART_MIN)
-        end = round((art + LEAD - off) / per / (STEP / 2)) * (STEP / 2) if art else nxt["b0"]
+        end = round(float(t2b(art + LEAD)) / (STEP / 2)) * (STEP / 2) if art else nxt["b0"]
         end = max(end, nt["b0"] + STEP)
         nt["b1"] = end if nxt["b0"] - end >= STEP / 2 else nxt["b0"]
         continue
     if rs is None:
         continue
-    end = math.ceil((rs - off) / per / STEP) * STEP
+    end = math.ceil(float(t2b(rs)) / STEP) * STEP
     end = max(end, nt["b0"] + STEP)
     if nxt and nxt["b0"] - end < STEP:
         end = nxt["b0"]
@@ -269,4 +296,11 @@ notes = merged
 ph = np.array([nt["b0"] % 1 for nt in notes])
 print(f"consonant lead {LEAD * 1000:+.0f} ms; tuning {tune * 100:+.0f} cents, {len(notes)} notes, {sum(n['lyric'] == '-' for n in notes)} slurs;"
       f" onset phases {[int(np.sum(np.isclose(ph, q))) for q in (0, .25, .5, .75)]}")
-json.dump(dict(tune=tune, off=off, per=per, notes=notes), open(sys.argv[4], "w"), indent=0)
+out = dict(tune=tune, off=off, per=per, notes=notes)
+if BEATS is not None:
+    # keep the musical beat of every note, and place it on a steady 120 BPM project grid at its real time
+    for nt in notes:
+        nt["mb0"], nt["mb1"] = nt["b0"], nt["b1"]
+        nt["b0"], nt["b1"] = round(float(b2t(nt["mb0"])) / 0.5, 4), round(float(b2t(nt["mb1"])) / 0.5, 4)
+    out.update(off=0.0, per=0.5, beats=[round(float(x), 4) for x in BEATS])
+json.dump(out, open(sys.argv[4], "w"), indent=0)
