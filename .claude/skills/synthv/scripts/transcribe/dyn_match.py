@@ -1,6 +1,6 @@
 """Give a SynthV track the original singer's dynamics: draw a Loudness curve so the render's level
 follows the original vocal's level, moment to moment, inside every note.
-Usage: python -I dyn_match.py in.svp render.wav original.wav lead_seconds out.svp [--smooth 0.05] [--cut 10]
+Usage: python -I dyn_match.py in.svp render.wav original.wav lead_seconds out.svp [--smooth 0.05] [--cut 10] [--boost 10]
 render.wav is a render of in.svp (project time); original.wav is the vocal it was transcribed from,
 which starts lead_seconds into the project. Replaces any Loudness curve (it also does boost.py's job).
 With new lyrics (e.g. a Japanese version) use --smooth 0.25 --cut 4: the original's level dips at its
@@ -18,10 +18,11 @@ for name in ("src", "render", "orig"):
     ap.add_argument(name)
 ap.add_argument("lead", type=float); ap.add_argument("out")
 ap.add_argument("--smooth", type=float, default=0.05, help="seconds of smoothing on the correction")
-ap.add_argument("--cut", type=float, default=10.0, help="largest cut in dB (boosts go up to 10 dB)")
+ap.add_argument("--cut", type=float, default=10.0, help="largest cut in dB")
+ap.add_argument("--boost", type=float, default=10.0, help="largest boost in dB (above ~6 Teto can sound strained)")
 A = ap.parse_args()
 src, render, orig, lead, out = A.src, A.render, A.orig, A.lead, A.out
-LIMIT = 10.0
+LIMIT = A.boost
 
 
 def env(path, shift):
