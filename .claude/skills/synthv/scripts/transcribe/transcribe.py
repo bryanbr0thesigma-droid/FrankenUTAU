@@ -1,6 +1,6 @@
 """Turn a pitch track plus word alignment into quantized SynthV notes with English lyrics.
 Usage: python -I transcribe.py f0.npz align.json grid.npy out.json [novelty.npy]
---step sets the grid (default 0.25 = sixteenths); 0.0833 suits songs that mix triplet and straight feels.
+--step sets the grid in beats (default 0.25 = sixteenths); 1/12 suits songs that mix triplet and straight feels.
 grid.npy is [first beat, seconds per beat] (tempo.py) or, for a song that changes tempo, the time of
 every beat (beatmap.py): notes then snap to the local beat and land in the project at their real times
 on a steady 120 BPM grid ("b0"/"b1"), with their musical beats kept as "mb0"/"mb1".
@@ -15,7 +15,8 @@ import pronouncing
 
 STEP = 0.25                                    # quantize to sixteenths (beats)
 if "--step" in sys.argv:                       # e.g. --step 0.0833: twelfths, for shuffle/triplet feels
-    i = sys.argv.index("--step"); STEP = float(sys.argv[i + 1]); del sys.argv[i:i + 2]
+    i = sys.argv.index("--step"); v = sys.argv[i + 1]; del sys.argv[i:i + 2]
+    STEP = float(v.split("/")[0]) / float(v.split("/")[1]) if "/" in v else float(v)
 SPECIAL = {"uhh": 1, "ohh": 1, "wanna": 2, "gonna": 2, "gotta": 2}
 LAMBDA = 2.0                                   # cost per second of distance from the aligner's guess
 MIN_GAP = 0.08                                 # shortest syllable (s)
@@ -295,7 +296,7 @@ for nt in notes:
 notes = merged
 ph = np.array([nt["b0"] % 1 for nt in notes])
 print(f"consonant lead {LEAD * 1000:+.0f} ms; tuning {tune * 100:+.0f} cents, {len(notes)} notes, {sum(n['lyric'] == '-' for n in notes)} slurs;"
-      f" onset phases {[int(np.sum(np.isclose(ph, q))) for q in (0, .25, .5, .75)]}")
+      f" onset phases {[int(np.sum(np.isclose(ph, q))) for q in np.arange(0, 1, 0.25 if STEP == 0.25 else 1 / 3)]}")
 out = dict(tune=tune, off=off, per=per, notes=notes)
 if BEATS is not None:
     # keep the musical beat of every note, and place it on a steady 120 BPM project grid at its real time
