@@ -1,6 +1,6 @@
 """Give a SynthV track the original singer's dynamics: draw a Loudness curve so the render's level
 follows the original vocal's level, moment to moment, inside every note.
-Usage: python -I dyn_match.py in.svp render.wav original.wav lead_seconds out.svp [--smooth 0.05] [--cut 10] [--boost 10]
+Usage: python -I dyn_match.py in.svp render.wav original.wav lead_seconds out.svp [--smooth 0.05] [--cut 10] [--boost 10] [--local 0]
 render.wav is a render of in.svp (project time); original.wav is the vocal it was transcribed from,
 which starts lead_seconds into the project. Replaces any Loudness curve (it also does boost.py's job).
 With new lyrics (e.g. a Japanese version) use --smooth 0.25 --cut 4: the original's level dips at its
@@ -20,6 +20,9 @@ ap.add_argument("lead", type=float); ap.add_argument("out")
 ap.add_argument("--smooth", type=float, default=0.05, help="seconds of smoothing on the correction")
 ap.add_argument("--cut", type=float, default=10.0, help="largest cut in dB")
 ap.add_argument("--boost", type=float, default=10.0, help="largest boost in dB (above ~6 Teto can sound strained)")
+ap.add_argument("--local", type=float, default=0.0,
+                help="seconds: remove the correction's moving median over this window, so only note-to-note "
+                     "dips are fixed and section levels (a soft bridge) are left to the mix (e.g. 8)")
 A = ap.parse_args()
 src, render, orig, lead, out = A.src, A.render, A.orig, A.lead, A.out
 LIMIT = A.boost
@@ -59,6 +62,12 @@ filled = np.interp(idx, idx[ok], corr[ok])
 med = np.array([np.median(filled[max(0, i - 3):i + 4]) for i in range(n)])
 k = max(1, int(round(A.smooth * 100)))
 sm = np.convolve(np.pad(med, k, mode="edge"), np.ones(k) / k, mode="same")[k:-k]
+if A.local:                                   # keep only the local part of the correction
+    w = int(A.local * 100) | 1
+    sub = sm[::10]                                # 100 ms steps keep the moving median cheap
+    pad = np.pad(sub, w // 20, mode="edge")
+    trend = np.array([np.median(pad[i:i + w // 10 + 1]) for i in range(len(sub))])
+    sm = sm - np.repeat(trend, 10)[:len(sm)]
 sm = np.clip(sm, -A.cut, LIMIT)
 pts = []
 for a, b in spans:
