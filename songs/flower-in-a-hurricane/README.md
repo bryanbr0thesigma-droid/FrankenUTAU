@@ -8,6 +8,16 @@ sung by the English (Arpasing) versions of **BAKO** (Xbox) and **Puresu** (PlayS
 | `flower-in-a-hurricane-bako-puresu-cover.mp3` | the cover: our banks over the UVR5 instrumental |
 | `flower-in-a-hurricane-bako-puresu-acapella.mp3` | just BAKO and Puresu |
 | `flower-in-a-hurricane-uvr5-vocals.mp3` | the original vocals isolated with UVR5 (for comparing) |
+| `flower-in-a-hurricane-mv-480p.mp4` | a basic MV (480p, small enough for jsDelivr) |
+| `flower-in-a-hurricane-mv.mp4` | the same MV at 720p |
+
+## MV
+
+A simple 2D scene (`mv/flower.html`, `mv/src/flower/main.js`): a Vice-City sunset over the sea, palms, a hurricane
+that builds through the song, rain and a hibiscus in the wind, and BAKO (green) and Puresu (blue) as two glowing
+screen-faced characters that light up and pulse when each one sings (envelopes of the rendered parts,
+`mv/assets/flower/data.json`; Puresu dims for harmony). Title card and credits. Rendered with
+`node mv/render.mjs --page flower --audio cover.wav --jobs 3`.
 
 ## Casting: BAKO is SZA, Puresu is Kevin Parker
 
