@@ -9,18 +9,44 @@ sung by the English (Arpasing) versions of **BAKO** (Xbox) and **Puresu** (PlayS
 | `flower-in-a-hurricane-bako-puresu-acapella.mp3` | just BAKO and Puresu |
 | `flower-in-a-hurricane-uvr5-vocals.mp3` | the original vocals isolated with UVR5 (for comparing) |
 
-## Casting
+## Casting: BAKO is SZA, Puresu is Kevin Parker
 
-| Time | Part | Who |
+Only two people sing on the track: Kevin Parker (Tame Impala) and SZA. King Gizzard & the Lizard Wizard are credited
+for guitar and co-writing. So the two banks take the two voices:
+
+* **BAKO = SZA**, at her pitch (BAKO's samples sit at C4; her lines run C#4–G#4).
+* **Puresu = Kevin Parker**, an octave down (Puresu's samples sit at B2): his lead lines, and his harmony under SZA,
+  which follows the backing stem's pitch (mostly a third below her, a sixth below in the bridge, a third above his
+  own lead at 1:42).
+
+Who sings what, worked out from the audio (see below):
+
+| Time | Lead | Harmony |
 | --- | --- | --- |
-| 1:05–1:37 | first vocal section | BAKO (at the original pitch) |
-| 1:42–1:51 | the contrasting passage | Puresu (an octave down) |
-| 2:06–2:20 | bridge | Puresu (an octave down) |
-| 2:29–3:16 | the first section again | BAKO, with Puresu an octave below |
-| 3:26–3:29 | tag | BAKO |
+| 1:05–1:09 | Parker | Parker |
+| 1:09–1:34 | SZA | Parker |
+| 1:34–1:37 | Parker | Parker |
+| 1:42–1:50 | Parker | Parker |
+| 2:06–2:18 | SZA | Parker |
+| 2:18–2:20 | Parker | Parker |
+| 2:29–2:37 | SZA | Parker |
+| 2:37–2:41 | Parker | Parker |
+| 2:41–2:59 | SZA | Parker |
+| 3:01–3:15 | Parker | — |
+| 3:28 | — | Parker |
 
-BAKO's samples sit at C4 and the melody runs C#4–G#4, so he sings it as written; Puresu's sit at B2, so he takes it
-an octave down. The casting is the `tools/cast_*.json` files (start/end in seconds, bank, transpose).
+The word-by-word version is `tools/cast/casting.txt`; the cast files are `tools/cast/cast_*.json`.
+
+### Telling the singers apart
+
+`tools/fetch_refs.py` takes Deezer's public 30-second previews of six solo SZA songs and six Tame Impala songs (plus
+four King Gizzard songs as a control); UVR5's Kim Vocal 2 isolates their vocals. `tools/voiceid.py` turns 3-second
+windows into WavLM speaker embeddings and checks itself first, leave-one-song-out: it names SZA on 6/6 unseen songs
+and Parker on 5/6 (King Gizzard only 2/4, mostly confused with Parker, another male psych voice). Then it scores
+every window of the lead and backing stems. The lead stem is mostly SZA with Parker's sections in between; the
+backing stem is male almost throughout, which is Parker's harmony under her. `tools/make_cast.py` casts each word by
+the windows around it, folds runs shorter than 1.5 s into their neighbours, and writes the cast files; the renderer
+splits a phrase where the singer changes.
 
 ## How it was made
 
@@ -35,14 +61,15 @@ an octave down. The casting is the `tools/cast_*.json` files (start/end in secon
 4. **Singing.** Each phrase becomes Arpasing units (`- k`, `k ae`, `ae t`, `t -` ...), each starting at its phoneme's
    time, and Voice-2-utau's `voice2utau.sing` engine renders them (WORLD), following the singer's own pitch curve
    instead of note numbers (`follow.py render`).
-5. **Mix.** `tools/mix.py`: each part follows the original's phrase loudness, gets a high-pass, a presence lift and a
-   short room, and is levelled to where the original lead sat; the vocal bus and the master are peak-limited.
+5. **Mix.** `tools/mix.py`: each part follows its original's phrase loudness (lead parts the lead stem, Parker's
+   harmony the backing stem), gets a high-pass, a presence lift and a short room, and is levelled to where that
+   original part sat; the vocal bus and the master are peak-limited.
 
-Checks (`tools/evalr.py`): the renders follow the singer's pitch to a median of 6–7 cents, and a phoneme recogniser
-reads them at least as well as the isolated original lead in every section (the quiet Puresu double excepted).
+Checks (`tools/evalr.py`): the lead parts follow the singer's pitch to a median of 7 cents and the harmony the
+backing stem's to 9 cents; a phoneme recogniser reads the lead parts at least as well as the isolated original lead
+(the harmony is harder to read, as it is in the original).
 
-Not included: the backing harmonies (the original's backing stem is not resung), and two unworded stretches at
-2:20–2:25 and 3:14–3:17 that sound like flat synth tones rather than voice.
+Not included: two unworded stretches at 2:20–2:25 and 3:14–3:17 that sound like flat synth tones rather than voice.
 
 ### Rebuild
 
@@ -51,8 +78,14 @@ pip install "audio-separator[cpu]" audioread pyworld praat-parselmouth transform
 tools/separate.sh song.mp3 stems
 python tools/words.py stems/vocals.wav sections.json words.json      # sections.json: {"sections": [[t0, t1], ...]}
 python tools/follow.py align stems/lead.wav words.json phones.json
-python tools/follow.py pitch stems/lead.wav pitch.npy
+python tools/follow.py pitch stems/lead.wav pitch_lead.npy
+python tools/follow.py pitch stems/backing.wav pitch_back.npy
+python tools/fetch_refs.py refs && audio-separator refs/*.mp3 -m Kim_Vocal_2.onnx --single_stem Vocals --output_dir refs/voc
+python tools/voiceid.py refs/voc voiceid.json stems/lead.wav stems/backing.wav
+python tools/make_cast.py phones.json pitch_lead.npy pitch_back.npy voiceid.json tools/cast
 # banks/BAKO_EN and banks/Puresu_EN unzipped from Voice-2-utau's banks/; V2U=path to a Voice-2-utau checkout
-for c in bako puresu_lead puresu_dbl; do python tools/follow.py render phones.json pitch.npy tools/cast_$c.json $c.wav; done
-python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav bako.wav:1 puresu_lead.wav:1 puresu_dbl.wav:-5
+python tools/follow.py render phones.json pitch_lead.npy tools/cast/cast_sza_lead.json sza.wav
+python tools/follow.py render phones.json pitch_lead.npy tools/cast/cast_parker_lead.json parker.wav
+python tools/follow.py render phones.json pitch_back.npy tools/cast/cast_parker_harm.json harmony.wav
+python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:1 parker.wav:1 harmony.wav:-1:0.25:stems/backing.wav
 ```

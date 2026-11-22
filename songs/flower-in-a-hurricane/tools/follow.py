@@ -279,19 +279,31 @@ def render(phones_json: str, pitch_npy: str, cast_json: str, out: str) -> None:
         cur = np.zeros(int(total * 1000 / FP) + 2)
         nfr = min(len(cents), len(cur))
         filled = fill(cents[:nfr])
+        # phones are cast one by one (by their start time), so a phrase can be handed over mid-way: each run of
+        # phones in one part is sung as its own phrase ('- x' ... 'y -')
+        groups = []
         for phr in phr_all:
-            mid = (phr[0][1] + phr[-1][2]) / 2
-            part = next((p for p in parts if p["t0"] <= mid < p["t1"]), None)
-            if part is None:
-                continue
-            us = units(phr, eng.oto)
+            run, run_part = [], None
+            for ph in phr:
+                part = next((p for p in parts if p["t0"] <= ph[1] < p["t1"]), None)
+                if run and part is not run_part:
+                    groups.append((run, run_part))
+                    run = []
+                run_part = part
+                if part is not None:
+                    run.append(ph)
+            if run:
+                groups.append((run, run_part))
+        for g, part in groups:
+            us = units(g, eng.oto)
             a, b = int(us[0][1] * 1000 / FP) - 40, int(us[-1][2] * 1000 / FP) + 40
             cur[max(0, a):b] = filled[max(0, a):b] + 100 * part.get("transpose", 0)
             for al, st, en in us:
                 if st > t + 1e-4:
                     notes.append(rest(t, st))
-                notes.append(note(al, st, en))
-                t = en
+                st = max(st, t)                                   # never overlap the previous unit of this voice
+                notes.append(note(al, st, max(en, st + 0.03)))
+                t = max(en, st + 0.03)
         if not notes:
             continue
         notes.append(rest(t, total))

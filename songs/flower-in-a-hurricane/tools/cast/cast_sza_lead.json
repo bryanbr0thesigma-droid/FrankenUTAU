@@ -1,0 +1,40 @@
+{
+"parts": [
+{
+"t0": 69.197,
+"t1": 78.82,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+},
+{
+"t0": 80.433,
+"t1": 93.732,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+},
+{
+"t0": 126.092,
+"t1": 137.607,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+},
+{
+"t0": 137.828,
+"t1": 138.548,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+},
+{
+"t0": 149.011,
+"t1": 157.262,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+},
+{
+"t0": 160.867,
+"t1": 179.58,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+}
+]
+}

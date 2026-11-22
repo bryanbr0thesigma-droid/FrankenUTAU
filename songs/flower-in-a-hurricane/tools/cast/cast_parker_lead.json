@@ -1,0 +1,40 @@
+{
+"parts": [
+{
+"t0": 65.392,
+"t1": 69.197,
+"bank": "banks/Puresu_EN",
+"transpose": -12
+},
+{
+"t0": 93.732,
+"t1": 96.706,
+"bank": "banks/Puresu_EN",
+"transpose": -12
+},
+{
+"t0": 102.685,
+"t1": 110.337,
+"bank": "banks/Puresu_EN",
+"transpose": -12
+},
+{
+"t0": 138.548,
+"t1": 140.35,
+"bank": "banks/Puresu_EN",
+"transpose": -12
+},
+{
+"t0": 157.262,
+"t1": 160.867,
+"bank": "banks/Puresu_EN",
+"transpose": -12
+},
+{
+"t0": 181.351,
+"t1": 194.999,
+"bank": "banks/Puresu_EN",
+"transpose": -12
+}
+]
+}

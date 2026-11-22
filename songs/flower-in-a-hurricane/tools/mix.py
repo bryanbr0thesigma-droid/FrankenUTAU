@@ -1,6 +1,6 @@
 """Mix rendered bank vocals over the instrumental.
 
-    python mix.py instrumental.wav ref_vocal.wav out.wav VOCAL.wav[:gain_db[:pan]] ...
+    python mix.py instrumental.wav ref_vocal.wav out.wav VOCAL.wav[:gain_db[:pan[:ref.wav]]] ...
 
 Each vocal follows the reference vocal's loudness (phrase level + a slow envelope), gets a high-pass, a short
 stereo room and a level that puts it where the original vocal sat over the same instrumental.
@@ -49,12 +49,26 @@ IRL, IRR = room(1), room(2)
 hp = butter(2, 110, "highpass", fs=sr, output="sos")
 presence = butter(2, [2000, 5000], "bandpass", fs=sr, output="sos")
 voc = np.zeros((N, 2))
-ref_env = env(ref, 0.25)
-sung = ref_env > ref_env.max() * 10 ** (-40 / 20)
+refs = {}
+
+
+def ref_of(path):
+    """reference vocal for a part: its loudness envelope and where it sings"""
+    if path not in refs:
+        r, _ = sf.read(path)
+        r = r.mean(1) if r.ndim > 1 else r
+        r = np.pad(r, (0, max(0, N - len(r))))[:N]
+        e = env(r, 0.25)
+        refs[path] = (r, e, e > e.max() * 10 ** (-40 / 20))
+    return refs[path]
+
+
 for spec in sys.argv[4:]:
+    # VOCAL.wav[:gain_db[:pan[:ref.wav]]]  (ref defaults to the main reference vocal)
     p, *rest = spec.split(":")
     g_db = float(rest[0]) if rest else 0.0
     pan = float(rest[1]) if len(rest) > 1 else 0.0
+    pref, ref_env, sung = ref_of(rest[2] if len(rest) > 2 else ref_p)
     y, ysr = sf.read(p)
     y = y.mean(1) if y.ndim > 1 else y
     assert ysr == sr, (p, ysr)
@@ -69,7 +83,7 @@ for spec in sys.argv[4:]:
     y = y * gain
     # level: the render's RMS where both sing = the original vocal's RMS there
     both = on & sung
-    lvl = np.sqrt((ref[both] ** 2).mean() / max(1e-12, (y[both] ** 2).mean()))
+    lvl = np.sqrt((pref[both] ** 2).mean() / max(1e-12, (y[both] ** 2).mean()))
     y = y * lvl * 10 ** (g_db / 20)
     L, R = np.cos((pan + 1) * np.pi / 4), np.sin((pan + 1) * np.pi / 4)
     voc[:, 0] += y * L * np.sqrt(2)
