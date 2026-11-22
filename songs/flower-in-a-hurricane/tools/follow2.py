@@ -34,7 +34,7 @@ UNVOICED = {"p", "t", "k", "f", "th", "s", "sh", "ch", "hh"}
 
 
 # ------------------------------------------------------------------ alignment
-def seg_align(post, blank, cols, kinds, voiced, quiet, word_of, loud=None, onset=None):
+def seg_align(post, blank, cols, kinds, voiced, quiet, word_of, loud=None, onset=None, notes=None):
     """Viterbi over [sil?] w1-phones [sil?] w2-phones ... [sil?]; each phone 2+ frames, silence 1+.
     Returns per phone (start_frame, end_frame_exclusive)."""
     T = post.shape[0]
@@ -71,7 +71,10 @@ def seg_align(post, blank, cols, kinds, voiced, quiet, word_of, loud=None, onset
             phone_state[k] = len(st_kind)
             e_first = e
             if onset is not None and kinds[k] in ("V", "V0"):
-                e_first = e + np.log(0.03 + 0.97 * onset)        # a syllable starts on a note change / attack
+                o = np.maximum(onset, notes) if notes is not None else onset
+                e_first = e + np.log(0.03 + 0.97 * o)            # a syllable starts on a note change / attack
+            if notes is not None and kinds[k] in ("V", "V0"):
+                e = e + np.log(1.0 - 0.85 * notes)               # holding one vowel through a note change costs
             n_min = {"V": 4, "V0": 3}.get(kinds[k], 2)            # minimum frames: 80 / 60 / 40 ms
             add("ph", k, e_first, True, False)
             for j in range(1, n_min):
@@ -136,6 +139,21 @@ def seg_align(post, blank, cols, kinds, voiced, quiet, word_of, loud=None, onset
     return spans
 
 
+def note_changes(cents, T, fdur, a):
+    """1 where the original moves to a new note (a step of 80+ cents between the 60 ms medians on either side,
+    CREPE curve), on the aligner's frame grid, with one frame of slack"""
+    from scipy.ndimage import median_filter
+    v = cents > 0
+    cs = median_filter(np.where(v, cents, np.nan), size=13, mode="nearest")
+    tt = a + (np.arange(T) + 0.5) * fdur
+    out = np.zeros(T)
+    for k, t in enumerate(tt):
+        i = int(t * 200)
+        if 12 <= i < len(cents) - 12 and v[i] and not np.isnan(cs[i + 6]) and not np.isnan(cs[i - 6]):
+            out[k] = float(np.clip((abs(cs[i + 6] - cs[i - 6]) - 60) / 60, 0, 1))
+    return np.maximum.reduce([out, np.r_[out[1:], 0], np.r_[0, out[:-1]]])
+
+
 def onsets(seg, T, fdur, cents, a):
     """0..1 per frame: how much a new syllable seems to start here. Selective on purpose (most frames ~0):
     a spectral attack well above the local level, a pitch step bigger than vibrato, or the voice coming in."""
@@ -198,6 +216,7 @@ def align(vocal: str, pitch_npy: str, lyrics_json: str, out: str) -> None:
         ref = np.array([db[max(0, i - W):i + W + 1].max() for i in range(T)])
         quiet = np.clip((-10 - (db - ref)) / 10, 0, 1)
         onset = onsets(seg, T, fdur, cents, a)
+        notes = note_changes(cents, T, fdur, a)
         words, cols, kinds, word_of = [], [], [], []
         for line in sec["lines"]:
             for w in re.findall(r"[A-Za-z']+", line):
@@ -214,7 +233,7 @@ def align(vocal: str, pitch_npy: str, lyrics_json: str, out: str) -> None:
                         kinds.append("U" if p in UNVOICED else "C")
                     word_of.append(len(words) - 1)
         labels = [p for w, _, _ in words for p in word_phones(w, d)]
-        spans = seg_align(post, vocab["<pad>"], cols, kinds, voiced, quiet, word_of, onset=onset)
+        spans = seg_align(post, vocab["<pad>"], cols, kinds, voiced, quiet, word_of, onset=onset, notes=notes)
         for w, k0, n in words:
             res.append({"w": w, "phones": [[labels[k], round(a + spans[k][0] * fdur, 3), round(a + spans[k][1] * fdur, 3)]
                                            for k in range(k0, k0 + n)]})
@@ -249,8 +268,16 @@ def phrases2(words: list[dict], gap: float = 0.12, cents=None) -> list[list[list
                 continue
             tail = sum(p[2] - p[1] for p in phr[j + 1:])           # final consonants keep their length
             t = phr[j][2] + tail
-            while t < nxt and (isv(t) or isv(t + 0.05)):
+            base = cents[min(len(cents) - 1, int(phr[j][2] * 1000 / FP))]
+            while t < nxt and any(isv(t + d) for d in (0.0, 0.04, 0.08, 0.12)):   # bridge voicing gaps < 120 ms
+                now = cents[min(len(cents) - 1, int(t * 1000 / FP))]
+                if base > 0 and now > 0 and abs(now - base) > 120:   # the singer moved to another note: done
+                    break
+                if now > 0 and base <= 0:
+                    base = now
                 t += FP / 1000
+            while t > phr[j][2] + tail and not isv(t):                # end on the last voiced frame, not in a gap
+                t -= FP / 1000
             ext = min(t, nxt) - (phr[j][2] + tail)
             if ext > 0.03:
                 phr[j][2] += ext
@@ -415,6 +442,11 @@ def render(phones_json: str, pitch_npy: str, cast_json: str, out: str, ref_wav: 
                 groups.append((run, run_part))
             for g, part in groups:
                 c = filled + 100 * part.get("transpose", 0)
+                lim = part["t1"] + 0.2                               # a held note never runs past its singer's turn
+                if g[-1][2] > lim:
+                    over = g[-1][2] - lim
+                    g = [list(p) for p in g]
+                    g[-1][2] = max(g[-1][1] + 0.06, g[-1][2] - over)
                 for al in R.phrase(g, c, y):
                     missing[al] = missing.get(al, 0) + 1
                 n_units += len(g) + 1

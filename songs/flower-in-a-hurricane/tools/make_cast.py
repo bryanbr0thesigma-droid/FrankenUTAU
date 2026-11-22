@@ -102,6 +102,22 @@ for role, words in words_by_role.items():
             txt.append((a_, role, labs[i], b_, j - i + 1))
             i = j + 1
 
+# a turn lasts until the other singer comes in (lead / solo), or the same part starts again, at most 3 s after its
+# last word, so held notes are not cut short but never run into someone else's line
+spans = [(k, i) for k in parts for i in range(len(parts[k]))]
+for k, i in spans:
+    who, role = k.split("_")
+    a_, b_ = parts[k][i]
+    limit = b_ - 0.5 + 3.0
+    for k2 in parts:
+        w2, r2 = k2.split("_")
+        for a2, _ in parts[k2]:
+            if a2 <= a_ + 0.01:
+                continue
+            if (k2 == k) or (role != "harm" and r2 != "harm" and w2 != who):
+                limit = min(limit, a2 - 0.03)
+    parts[k][i] = (a_, max(b_, limit) if limit > b_ else b_)
+
 Path(outdir).mkdir(parents=True, exist_ok=True)
 for k, spans in parts.items():
     bank, tr = BANKS[k.split("_")[0]]

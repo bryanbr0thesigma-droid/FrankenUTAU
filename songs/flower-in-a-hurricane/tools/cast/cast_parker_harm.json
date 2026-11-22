@@ -2,61 +2,49 @@
 "parts": [
 {
 "t0": 68.99,
-"t1": 90.838,
+"t1": 91.308,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
 "t0": 91.338,
-"t1": 94.87,
+"t1": 97.37,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
 "t0": 105.81,
-"t1": 111.112,
+"t1": 113.391,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
-"t0": 126.351,
-"t1": 127.513,
+"t0": 126.091,
+"t1": 130.526,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
-"t0": 127.753,
-"t1": 129.595,
-"bank": "banks/Puresu_EN",
-"transpose": 0
-},
-{
-"t0": 130.656,
-"t1": 140.517,
+"t0": 130.556,
+"t1": 142.26,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
 "t0": 142.29,
-"t1": 143.0,
+"t1": 145.5,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
 "t0": 148.97,
-"t1": 156.573,
+"t1": 159.825,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
-"t0": 157.054,
-"t1": 159.435,
-"bank": "banks/Puresu_EN",
-"transpose": 0
-},
-{
-"t0": 160.815,
-"t1": 179.132,
+"t0": 159.855,
+"t1": 181.632,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 }

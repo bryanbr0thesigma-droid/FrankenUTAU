@@ -33,7 +33,7 @@ Who sings what, worked out from the audio (see below):
 
 | Time | Lead | Harmony |
 | --- | --- | --- |
-| 1:05–1:09 | Parker (solo, from the backing track) | — |
+| 1:05–1:09 | SZA (melody) and Parker (a third below), from both tracks | — |
 | 1:09–1:18 | SZA | Parker |
 | 1:18–1:21 | Parker | Parker |
 | 1:21–1:35 | SZA | Parker |
@@ -75,7 +75,8 @@ splits a phrase where the singer changes.
    blank frames, so a held note stays on its vowel instead of the next word's consonant being pulled into it. Priors
    do the rest: vowels want voiced, loud frames and start on a note change or an attack (pitch step, spectral
    onset); s/t/k/f want unvoiced frames; a pause is anything 10–20 dB below the phrase around it. Vowels last at
-   least 60–80 ms.
+   least 60–80 ms. A note change of the original (CREPE: a step of 80+ cents) pulls a syllable start onto it and
+   makes holding one vowel through it expensive, so the banks do not hang on a note and then rush the next syllables.
 4. **Pitch.** CREPE (full model, Viterbi decoding) on each stem, every 5 ms (`tools/crepe_pitch.py`). The first
    versions used Praat's autocorrelation tracker, which on the separated backing stem fell to subharmonics in 18 % of
    its frames (E2 or A2 where the singer holds E4), so the backing-track lines were badly out of tune.
@@ -83,7 +84,8 @@ splits a phrase where the singer changes.
    unit's sample (WORLD analysis from Voice-2-utau's engine) is placed so its preutterance point lands exactly on the
    phoneme's start; when the sound before it is short, the lead-in is squeezed, never shifted. Neighbouring
    units are cross-faded (the single-pass synthesis tried here sounded worse and was dropped). The pitch is the
-   singer's own curve, not note numbers, and a phrase's last note is held as long as the singer holds it.
+   singer's own curve, not note numbers, and a phrase's last note is held as long as the singer holds it, but never
+   through a change to another note and never into the other singer's turn.
    **Pitch clean-up** (`tools/clean_pitch.py`): a separated stem's tracker sometimes jumps for a few frames to the
    other singer's note, a harmonic or an octave, which sung back is a yelp; those blips are bridged. Whole stretches
    tracked an octave or two low (9.5 % of the backing curve: Puresu growling below his own range) are folded back
@@ -139,6 +141,7 @@ python tools/harm_pitch.py phones_harm.json pitch_lead_f.npy pitch_back_f.npy to
 python tools/follow2.py render phones_lead.json pitch_lead_f.npy tools/cast/cast_sza_lead.json sza.wav stems/lead.wav
 python tools/follow2.py render phones_lead.json pitch_lead_f.npy tools/cast/cast_parker_lead.json parker.wav stems/lead.wav
 python tools/follow2.py render phones_solo.json pitch_back_f.npy tools/cast/cast_parker_solo.json solo.wav stems/backing.wav
+# the opening line: SZA's melody from the lead stem's pitch on the same timing (cast_sza_duet), as duet.wav
 python tools/follow2.py render phones_harm.json pitch_harm.npy tools/cast/cast_parker_harm.json harmony.wav stems/backing.wav
-MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 solo.wav:2:0:stems/backing.wav harmony.wav:-3:0.25:stems/backing.wav
+MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 solo.wav:2:0:stems/backing.wav duet.wav:2:0:stems/backing.wav harmony.wav:-3:0.25:stems/backing.wav
 ```
