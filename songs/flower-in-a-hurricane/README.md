@@ -68,7 +68,13 @@ splits a phrase where the singer changes.
    (`follow.py pitch`).
 5. **Singing (`follow2.py render`).** Each phrase becomes Arpasing units (`- k`, `k ae`, `ae t`, `t -` ...). Each
    unit's sample (WORLD analysis from Voice-2-utau's engine) is placed so its preutterance point lands exactly on the
-   phoneme's start; when the sound before it is short, the lead-in is squeezed, never shifted. The pitch is the
+   phoneme's start; when the sound before it is short, the lead-in is squeezed, never shifted. A phrase is
+   synthesised in one WORLD pass: the units' spectral envelopes are blended over 40 ms where they meet, so the voice
+   runs continuously instead of cross-fading separate waveforms, and sung vowels stay voiced end to end.
+   **Pitch clean-up** (`tools/clean_pitch.py`): a separated stem's tracker sometimes jumps for a few frames to the
+   other singer's note, a harmonic or an octave, which sung back is a yelp; those blips are bridged.
+   **Harmony in time** (`tools/harm_phones.py`): where Parker harmonises a line SZA sings, his syllables use her
+   timing (his own pitch), so they sing each word together; only his solo lines keep their own timing. The pitch is the
    singer's own curve, not note numbers, and a phrase's last note is held as long as the singer holds it.
    **Expression**: each part then follows its original voice the way a tuner draws dynamics and tension: loudness
    syllable by syllable (30 ms), and brightness (1–5 kHz against the lows, at half depth), so where the singer
@@ -77,10 +83,11 @@ splits a phrase where the singer changes.
    harmony the backing stem), gets a high-pass, a presence lift and a short room, and is levelled to where that
    original part sat; the vocal bus and the master are peak-limited.
 
-Checks (`tools/diag.py`, `tools/lag.py`, `tools/evalr.py`), against the isolated original vocals: the banks sing during
-96 % of the original's sung time, start within a median of 10 ms of it, follow the pitch to 4–5 cents in the same
-octave, follow its loudness with a correlation of 0.92 (0.94 for the lead parts) over the same 16 dB range, and match
-its brightness within a dB; a phoneme recogniser reads them about as well as the isolated original. The banks themselves are fully synthesised (console sounds over a formant voice), so they will
+Checks (`tools/diag.py`, `tools/lag.py`, `tools/spasm.py`, `tools/evalr.py`), against the isolated original vocals:
+the banks sing during 97 % of the original's sung time, start within a median of 10 ms of it, follow its loudness
+(correlation 0.89, same 16 dB range) and brightness (within a dB); pitch jumps inside held vowels are down to 2 % of
+the lead vowels and 10 % of the harmony's (from 6–7 % and 25 %), and 93 % of the harmony's syllables sit with the
+lead's (from 59 %). The banks themselves are fully synthesised (console sounds over a formant voice), so they will
 never be as clear as a recorded singer.
 
 Not included: two unworded stretches at 2:20–2:25 and 3:14–3:17 that sound like flat synth tones rather than voice,
@@ -94,6 +101,8 @@ tools/separate.sh song.mp3 stems
 python tools/follow.py pitch stems/vocals.wav pitch.npy
 python tools/follow.py pitch stems/lead.wav pitch_lead.npy
 python tools/follow.py pitch stems/backing.wav pitch_back.npy
+python tools/clean_pitch.py pitch_lead.npy pitch_back.npy pitch_lead_c.npy   # repeat a few times
+python tools/clean_pitch.py pitch_back.npy pitch_lead.npy pitch_back_c.npy
 # lyrics.json: {"sections": [{"t0", "t1", "lines": [...]}]}, written from the Whisper passes (tools/words2.py)
 python tools/follow2.py align stems/vocals.wav pitch.npy lyrics.json phones_vocals.json
 python tools/stem_sheets.py lyrics.json phones_vocals.json pitch_lead.npy pitch_back.npy .
@@ -101,10 +110,11 @@ python tools/follow2.py align stems/lead.wav pitch_lead.npy sheet_lead.json phon
 python tools/follow2.py align stems/backing.wav pitch_back.npy sheet_backing.json phones_back.json
 python tools/fetch_refs.py refs && audio-separator refs/*.mp3 -m Kim_Vocal_2.onnx --single_stem Vocals --output_dir refs/voc
 python tools/voiceid.py refs/voc voiceid.json stems/lead.wav stems/backing.wav
-python tools/make_cast.py phones_lead.json phones_back.json pitch_lead.npy pitch_back.npy voiceid.json tools/cast
+python tools/harm_phones.py sheet_lead.json phones_lead.json sheet_backing.json phones_back.json phones_harm.json
+python tools/make_cast.py phones_lead.json phones_harm.json pitch_lead_c.npy pitch_back_c.npy voiceid.json tools/cast
 # banks/BAKO_EN and banks/Puresu_EN unzipped from Voice-2-utau's banks/; V2U=path to a Voice-2-utau checkout
-python tools/follow2.py render phones_lead.json pitch_lead.npy tools/cast/cast_sza_lead.json sza.wav stems/lead.wav
-python tools/follow2.py render phones_lead.json pitch_lead.npy tools/cast/cast_parker_lead.json parker.wav stems/lead.wav
-python tools/follow2.py render phones_back.json pitch_back.npy tools/cast/cast_parker_harm.json harmony.wav stems/backing.wav
-MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 harmony.wav:0:0.25:stems/backing.wav
+python tools/follow2.py render phones_lead.json pitch_lead_c.npy tools/cast/cast_sza_lead.json sza.wav stems/lead.wav
+python tools/follow2.py render phones_lead.json pitch_lead_c.npy tools/cast/cast_parker_lead.json parker.wav stems/lead.wav
+python tools/follow2.py render phones_harm.json pitch_back_c.npy tools/cast/cast_parker_harm.json harmony.wav stems/backing.wav
+MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 harmony.wav:-1:0.25:stems/backing.wav
 ```
