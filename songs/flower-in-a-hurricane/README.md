@@ -23,11 +23,12 @@ Who sings what, worked out from the audio (see below):
 
 | Time | Lead | Harmony |
 | --- | --- | --- |
-| 1:05–1:18 | SZA | Parker |
+| 1:05–1:09 | Parker (solo, from the backing track) | — |
+| 1:09–1:18 | SZA | Parker |
 | 1:18–1:21 | Parker | Parker |
 | 1:21–1:35 | SZA | Parker |
-| 1:35–1:42 | — | Parker (this line is on the backing track) |
-| 1:42–1:51 | Parker | Parker |
+| 1:35–1:46 | Parker (solo, from the backing track) | — |
+| 1:46–1:51 | Parker | Parker |
 | 2:06–2:20 | SZA | Parker |
 | 2:29–2:37 | SZA | Parker |
 | 2:37–2:41 | Parker | Parker |
@@ -58,7 +59,9 @@ splits a phrase where the singer changes.
    stored in the repo.
 3. **Timing (`follow2.py align`).** CMUdict phonemes of the sheet are force-aligned with a wav2vec2 phoneme model
    (xlsr-53 espeak), separately on the lead stem and on the backing stem (`tools/stem_sheets.py` picks the lines each
-   stem sings), so each voice keeps its own timing. It is a segmental aligner, not plain CTC: a vowel absorbs the
+   stem sings, by loudness: a line the karaoke split put on the backing stem, like the opening one, leaves only faint
+   bleed on the lead, and aligning words to bleed scrambles them), so each voice keeps its own timing. Lines only the
+   backing stem carries (1:05, 1:35, 1:42) are sung solo from it, at lead level. It is a segmental aligner, not plain CTC: a vowel absorbs the
    blank frames, so a held note stays on its vowel instead of the next word's consonant being pulled into it. Priors
    do the rest: vowels want voiced, loud frames and start on a note change or an attack (pitch step, spectral
    onset); s/t/k/f want unvoiced frames; a pause is anything 10–20 dB below the phrase around it. Vowels last at
@@ -113,13 +116,14 @@ python tools/follow2.py align stems/lead.wav pitch_lead.npy sheet_lead.json phon
 python tools/follow2.py align stems/backing.wav pitch_back.npy sheet_backing.json phones_back.json
 python tools/fetch_refs.py refs && audio-separator refs/*.mp3 -m Kim_Vocal_2.onnx --single_stem Vocals --output_dir refs/voc
 python tools/voiceid.py refs/voc voiceid.json stems/lead.wav stems/backing.wav
-python tools/harm_phones.py sheet_lead.json phones_lead.json sheet_backing.json phones_back.json phones_harm.json
-python tools/make_cast.py phones_lead.json phones_harm.json pitch_lead_f.npy pitch_back_f.npy voiceid.json tools/cast
-# (then: the 1:05 line to SZA, no harmony after 3:13.5, as in tools/cast)
+python tools/harm_phones.py sheet_lead.json phones_lead.json sheet_backing.json phones_back.json phones_harm.json phones_solo.json
+python tools/make_cast.py phones_lead.json phones_harm.json pitch_lead_f.npy pitch_back_f.npy voiceid.json tools/cast phones_solo.json
+# (then: no harmony after 3:13.5, as in tools/cast)
 python tools/harm_pitch.py phones_harm.json pitch_lead_f.npy pitch_back_f.npy tools/cast/cast_parker_harm.json pitch_harm.npy
 # banks/BAKO_EN and banks/Puresu_EN unzipped from Voice-2-utau's banks/; V2U=path to a Voice-2-utau checkout
 python tools/follow2.py render phones_lead.json pitch_lead_f.npy tools/cast/cast_sza_lead.json sza.wav stems/lead.wav
 python tools/follow2.py render phones_lead.json pitch_lead_f.npy tools/cast/cast_parker_lead.json parker.wav stems/lead.wav
+python tools/follow2.py render phones_solo.json pitch_back_f.npy tools/cast/cast_parker_solo.json solo.wav stems/backing.wav
 python tools/follow2.py render phones_harm.json pitch_harm.npy tools/cast/cast_parker_harm.json harmony.wav stems/backing.wav
-MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 harmony.wav:-3:0.25:stems/backing.wav
+MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 solo.wav:2:0:stems/backing.wav harmony.wav:-3:0.25:stems/backing.wav
 ```

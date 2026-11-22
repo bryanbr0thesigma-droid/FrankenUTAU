@@ -19,6 +19,7 @@ import numpy as np
 FP = 5.0
 MIN_RUN = 1.5
 phl, phb, plead, pback, vj, outdir = sys.argv[1:7]
+phs = sys.argv[7] if len(sys.argv) > 7 else None          # optional: solo lines carried by the backing stem
 BANKS = {"sza": ("banks/BAKO_EN", 0), "parker": ("banks/Puresu_EN", 0)}   # both at the singers' own pitch
 L, B = np.load(plead).astype(float), np.load(pback).astype(float)
 vid = json.load(open(vj))["stems"]
@@ -30,6 +31,8 @@ def load_words(p):
 
 
 words_by_role = {"lead": load_words(phl), "harm": load_words(phb)}
+if phs:
+    words_by_role["solo"] = load_words(phs)
 
 
 def curve(rows):
@@ -68,11 +71,11 @@ def smooth(labels, durs):
 
 
 lead_m, back_m = curve(vid["lead.wav"]), curve(vid["backing.wav"])
-parts = {k: [] for k in ("sza_lead", "parker_lead", "parker_harm", "sza_harm")}
+parts = {f"{w}_{r}": [] for r in words_by_role for w in ("sza", "parker")}
 txt = []
 for role, words in words_by_role.items():
     stem, curve_ = (L, lead_m) if role == "lead" else (B, back_m)
-    thr = 0.1 if role == "harm" else 0.0
+    thr = 0.1 if role != "lead" else 0.0
     blocks, cur = [], []                      # sung blocks split at pauses > 2 s: smoothing never crosses one
     for w in words:
         if cur and w["a"] - cur[-1]["b"] > 2.0:
@@ -83,7 +86,7 @@ for role, words in words_by_role.items():
         blocks.append(cur)
     for blk in blocks:
         durs = [w["b"] - w["a"] for w in blk]
-        on = [voiced(stem, w["a"], w["b"]) >= (0.2 if role == "lead" else 0.3) for w in blk]
+        on = [voiced(stem, w["a"], w["b"]) >= (0.3 if role == "harm" else 0.2) for w in blk]
         labs = smooth(["sza" if curve_((w["a"] + w["b"]) / 2) > thr else "parker" for w in blk], durs)
         i = 0
         while i < len(blk):

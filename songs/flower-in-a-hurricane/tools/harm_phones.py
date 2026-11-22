@@ -1,7 +1,8 @@
-"""Harmony timing that sings with the lead: where the backing stem sings a line the lead also sings (same text, at
-the same time), the harmony takes the lead's word timing; lines only the backing sings keep the backing's timing.
+"""Split the backing stem's lines: where it sings a line the lead also sings (same text, at the same time) it is a
+harmony and takes the lead's word timing (out_sync); lines only the backing stem carries are a solo voice there and
+keep the backing's own timing (out_solo).
 
-    python harm_phones.py sheet_lead.json phones_lead.json sheet_backing.json phones_back.json out.json
+    python harm_phones.py sheet_lead.json phones_lead.json sheet_backing.json phones_back.json out_sync.json out_solo.json
 """
 import json
 import re
@@ -23,13 +24,14 @@ def lines_of(sheet_p, phones_p):
 
 lead = lines_of(sys.argv[1], sys.argv[2])
 back = lines_of(sys.argv[3], sys.argv[4])
-res, synced = [], 0
+sync, solo = [], []
 for b in back:
     m = [l for l in lead if l["text"] == b["text"] and abs(l["t0"] - b["t0"]) < 2.0]
     if m:
-        res += m[0]["words"]
-        synced += 1
+        sync += m[0]["words"]
     else:
-        res += b["words"]
-json.dump(res, open(sys.argv[5], "w"), indent=0)
-print(f"{len(back)} backing lines: {synced} sung in time with the lead, {len(back) - synced} on their own timing")
+        solo += b["words"]
+json.dump(sync, open(sys.argv[5], "w"), indent=0)
+json.dump(solo, open(sys.argv[6], "w"), indent=0)
+print(f"{len(back)} backing lines: {len(back) - len([1 for b in back if not [l for l in lead if l['text'] == b['text'] and abs(l['t0'] - b['t0']) < 2.0]])} harmonies on the lead's timing, solo lines: " +
+      ", ".join(f"{int(b['t0'] // 60)}:{b['t0'] % 60:04.1f}" for b in back if not [l for l in lead if l["text"] == b["text"] and abs(l["t0"] - b["t0"]) < 2.0]))
