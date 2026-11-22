@@ -1,14 +1,14 @@
 {
 "parts": [
 {
-"t0": 65.21,
+"t0": 65.202,
 "t1": 68.96,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 },
 {
-"t0": 95.943,
-"t1": 108.497,
+"t0": 95.441,
+"t1": 108.449,
 "bank": "banks/Puresu_EN",
 "transpose": 0
 }

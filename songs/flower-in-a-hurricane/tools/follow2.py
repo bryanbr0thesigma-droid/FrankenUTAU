@@ -31,6 +31,8 @@ sys.path.insert(0, os.environ.get("V2U", str(HERE.parent / "v2u_src")))
 from follow import FP, IPA, VOW, fill, word_phones  # noqa: E402
 
 UNVOICED = {"p", "t", "k", "f", "th", "s", "sh", "ch", "hh"}
+FUNCTION_WORDS = {"a", "an", "the", "in", "on", "of", "to", "and", "or", "but", "for", "at", "as", "is", "it", "its",
+                  "by", "if", "so", "has", "than", "that", "this", "with", "from", "into", "till"}
 
 
 # ------------------------------------------------------------------ alignment
@@ -61,8 +63,10 @@ def seg_align(post, blank, cols, kinds, voiced, quiet, word_of, loud=None, onset
         end = starts[w + 1] if w + 1 < nw else len(cols)
         for k in range(starts[w], end):
             P = post[:, cols[k]].sum(1)
-            if kinds[k] in ("V", "V0"):
-                hold = 0.25                                         # any vowel may carry a held note
+            if kinds[k] in ("V", "V0", "VF"):
+                # who carries a held note: stressed vowels most easily, unstressed ones less, function words
+                # ("in", "a", "the" ...) hardly ever
+                hold = 0.25 * {"V": 1.0, "V0": 0.85, "VF": 0.4}[kinds[k]]
                 e = np.log(P + hold * b + 1e-4) + np.log(0.3 + 0.7 * voiced) + np.log(0.03 + 0.97 * loud)
             elif kinds[k] == "U":
                 e = np.log(P + 0.05 * b + 1e-4) + np.log(0.45 + 0.55 * (1 - voiced)) + np.log(0.4 + 0.6 * loud)
@@ -70,12 +74,12 @@ def seg_align(post, blank, cols, kinds, voiced, quiet, word_of, loud=None, onset
                 e = np.log(P + 0.05 * b + 1e-4) + np.log(0.3 + 0.7 * voiced) + np.log(0.2 + 0.8 * loud)
             phone_state[k] = len(st_kind)
             e_first = e
-            if onset is not None and kinds[k] in ("V", "V0"):
+            if onset is not None and kinds[k] in ("V", "V0", "VF"):
                 o = np.maximum(onset, notes) if notes is not None else onset
                 e_first = e + np.log(0.03 + 0.97 * o)            # a syllable starts on a note change / attack
-            if notes is not None and kinds[k] in ("V", "V0"):
-                e = e + np.log(1.0 - 0.85 * notes)               # holding one vowel through a note change costs
-            n_min = {"V": 4, "V0": 3}.get(kinds[k], 2)            # minimum frames: 80 / 60 / 40 ms
+            if notes is not None and kinds[k] in ("V", "V0", "VF"):
+                e = e + np.log(1.0 - 0.97 * notes)               # holding one vowel through a note change costs a lot
+            n_min = {"V": 4, "V0": 3, "VF": 3}.get(kinds[k], 2)            # minimum frames: 80 / 60 / 40 ms
             add("ph", k, e_first, True, False)
             for j in range(1, n_min):
                 add("ph", k, e, False, j == n_min - 1)            # only the last one loops
@@ -228,7 +232,10 @@ def align(vocal: str, pitch_npy: str, lyrics_json: str, out: str) -> None:
                 for p, st in zip(ph, stress):
                     cols.append(colmap[p])
                     if p in VOW:
-                        kinds.append("V0" if st == "0" and nvow > 1 else "V")
+                        if re.sub(r"[^a-z']", "", w.lower()) in FUNCTION_WORDS:
+                            kinds.append("VF")
+                        else:
+                            kinds.append("V0" if st == "0" and nvow > 1 else "V")
                     else:
                         kinds.append("U" if p in UNVOICED else "C")
                     word_of.append(len(words) - 1)
@@ -284,6 +291,48 @@ def phrases2(words: list[dict], gap: float = 0.12, cents=None) -> list[list[list
                 for p in phr[j + 1:]:
                     p[1] += ext
                     p[2] += ext
+    return out
+
+
+CONS_MS = {**{c: 70 for c in ("p", "t", "k", "b", "d", "g", "m", "n", "ng", "l", "r", "w", "y", "dh", "v")},
+           **{c: 100 for c in ("s", "sh", "f", "th", "z", "zh", "ch", "jh")}, "hh": 60}
+
+
+def retime(phr: list[list]) -> list[list]:
+    """UTAU-style timing: every vowel keeps its start (it sits on its note); the consonants before it get natural
+    lengths (stops/nasals ~70 ms, s/f/sh ~100 ms), taken from the end of the vowel before, which may give up at most
+    half of itself; consonants after the phrase's last vowel get their natural length too."""
+    out = [list(p) for p in phr]
+    vi = [i for i, p in enumerate(out) if p[0] in VOW]
+    if not vi:
+        return out
+    for n, i in enumerate(vi):
+        j = i - 1
+        cluster = []
+        while j >= 0 and out[j][0] not in VOW:
+            cluster.append(j)
+            j -= 1
+        if not cluster:
+            continue
+        cluster.reverse()
+        want = [CONS_MS.get(out[k][0], 70) / 1000 for k in cluster]
+        prev_v = j if j >= 0 else None
+        room = (out[i][1] - out[prev_v][1]) * 0.5 if prev_v is not None else sum(want)
+        scale = min(1.0, room / max(1e-6, sum(want)))
+        t = out[i][1]
+        for k, d in zip(reversed(cluster), reversed(want)):
+            d = max(0.025, d * scale)
+            out[k][2] = t
+            out[k][1] = t - d
+            t -= d
+        if prev_v is not None:
+            out[prev_v][2] = out[cluster[0]][1]
+    last = vi[-1]
+    t = out[last][2]
+    for k in range(last + 1, len(out)):
+        d = CONS_MS.get(out[k][0], 70) / 1000
+        out[k][1], out[k][2] = t, t + d
+        t += d
     return out
 
 
@@ -441,6 +490,8 @@ def render(phones_json: str, pitch_npy: str, cast_json: str, out: str, ref_wav: 
             if run:
                 groups.append((run, run_part))
             for g, part in groups:
+                if os.environ.get("RETIME", "1") == "1":
+                    g = retime(g)
                 c = filled + 100 * part.get("transpose", 0)
                 lim = part["t1"] + 0.2                               # a held note never runs past its singer's turn
                 if g[-1][2] > lim:

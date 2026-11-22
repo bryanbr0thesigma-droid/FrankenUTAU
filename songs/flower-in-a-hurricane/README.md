@@ -77,13 +77,19 @@ splits a phrase where the singer changes.
    onset); s/t/k/f want unvoiced frames; a pause is anything 10–20 dB below the phrase around it. Vowels last at
    least 60–80 ms. A note change of the original (CREPE: a step of 80+ cents) pulls a syllable start onto it and
    makes holding one vowel through it expensive, so the banks do not hang on a note and then rush the next syllables.
+   Which vowel may carry a long note: stressed ones most easily, unstressed ones a little less, function words ("in",
+   "a", "the" ...) hardly ever. Lines only the backing stem carries are aligned one by one in their own windows
+   (`tools/solo_sheet.py`).
 4. **Pitch.** CREPE (full model, Viterbi decoding) on each stem, every 5 ms (`tools/crepe_pitch.py`). The first
    versions used Praat's autocorrelation tracker, which on the separated backing stem fell to subharmonics in 18 % of
    its frames (E2 or A2 where the singer holds E4), so the backing-track lines were badly out of tune.
 5. **Singing (`follow2.py render`).** Each phrase becomes Arpasing units (`- k`, `k ae`, `ae t`, `t -` ...). Each
    unit's sample (WORLD analysis from Voice-2-utau's engine) is placed so its preutterance point lands exactly on the
    phoneme's start; when the sound before it is short, the lead-in is squeezed, never shifted. Neighbouring
-   units are cross-faded (the single-pass synthesis tried here sounded worse and was dropped). The pitch is the
+   units are cross-faded (the single-pass synthesis tried here sounded worse and was dropped). Consonants are timed the
+   UTAU way (`retime`): each vowel stays on its note, and the consonants before it get natural lengths (stops and
+   nasals ~70 ms, s/f/sh ~100 ms) taken from the end of the previous vowel; a phoneme aligner on its own gives every
+   consonant its 40 ms minimum, which crushed them ("hurricane" came out as "hair-uh-qu-tea"). The pitch is the
    singer's own curve, not note numbers, and a phrase's last note is held as long as the singer holds it, but never
    through a change to another note and never into the other singer's turn.
    **Pitch clean-up** (`tools/clean_pitch.py`): a separated stem's tracker sometimes jumps for a few frames to the
@@ -134,6 +140,8 @@ python tools/follow2.py align stems/backing.wav pitch_back.npy sheet_backing.jso
 python tools/fetch_refs.py refs && audio-separator refs/*.mp3 -m Kim_Vocal_2.onnx --single_stem Vocals --output_dir refs/voc
 python tools/voiceid.py refs/voc voiceid.json stems/lead.wav stems/backing.wav
 python tools/harm_phones.py sheet_lead.json phones_lead.json sheet_backing.json phones_back.json phones_harm.json phones_solo.json
+python tools/solo_sheet.py lyrics.json phones_vocals.json stems sheet_solo.json
+python tools/follow2.py align stems/backing.wav pitch_back_f.npy sheet_solo.json phones_solo.json
 python tools/make_cast.py phones_lead.json phones_harm.json pitch_lead_f.npy pitch_back_f.npy voiceid.json tools/cast phones_solo.json
 # (then: no harmony after 3:13.5, as in tools/cast)
 python tools/harm_pitch.py phones_harm.json pitch_lead_f.npy pitch_back_f.npy tools/cast/cast_parker_harm.json pitch_harm.npy
