@@ -39,7 +39,8 @@ Who sings what, worked out from the audio (see below):
 | 1:21–1:35 | SZA | Parker |
 | 1:35–1:46 | Parker (solo, from the backing track) | — |
 | 1:46–1:51 | Parker | Parker |
-| 2:06–2:20 | SZA | Parker |
+| 2:06–2:16 | SZA | Parker |
+| 2:17–2:22 | SZA ("I'll live it to the very last breath", held) | — |
 | 2:29–2:37 | SZA | Parker |
 | 2:37–2:41 | Parker | Parker |
 | 2:41–2:59 | SZA | Parker |
@@ -63,10 +64,10 @@ splits a phrase where the singer changes.
 1. **Separation (UVR5 models).** `tools/separate.sh` runs the UVR5 model files through python-audio-separator on the
    CPU: BS-Roformer Viperx 1297 for vocals and instrumental, then Mel-Roformer Karaoke (aufr33/viperx) to split the
    vocals into lead and backing.
-2. **Lyrics.** Whisper (large-v3-turbo, `tools/words.py` / `tools/words2.py`) is unreliable on this song: it
-   invents lines ("thank you") and changes words between passes. So the lyric sheet is reconciled by hand from several
-   passes, with the four chorus repeats checked against each other and anything invented dropped. The sheet is not
-   stored in the repo.
+2. **Lyrics.** The official lyrics (Whisper, `tools/words.py` / `tools/words2.py`, got several lines wrong: "All the
+   crashes" for "Thunder crashes", "I'll be there" for "I'll live it", "rising to" for "rise into"). The background
+   ad-libs ("Oh", "uh-huh", "an end") are left out. The sheet is not stored in the repo. "Live" is sung "liv" (the
+   dictionary's first reading is the adjective).
 3. **Timing (`follow2.py align`).** CMUdict phonemes of the sheet are force-aligned with a wav2vec2 phoneme model
    (xlsr-53 espeak), separately on the lead stem and on the backing stem (`tools/stem_sheets.py` picks the lines each
    stem sings, by loudness: a line the karaoke split put on the backing stem, like the opening one, leaves only faint
@@ -79,7 +80,9 @@ splits a phrase where the singer changes.
    makes holding one vowel through it expensive, so the banks do not hang on a note and then rush the next syllables.
    Which vowel may carry a long note: stressed ones most easily, unstressed ones a little less, function words ("in",
    "a", "the" ...) hardly ever. Lines only the backing stem carries are aligned one by one in their own windows
-   (`tools/solo_sheet.py`).
+   (`tools/solo_duet.py`); where the lead stem still carries a voice within 8 dB (the opening), it is a duet with
+   SZA's melody on top. "I'll live it to the very last breath" is timed from the word starts the recogniser reads off
+   the full vocal (`tools/anchor_align.py` and by hand), since the aligner kept holding the wrong vowel there.
 4. **Pitch.** CREPE (full model, Viterbi decoding) on each stem, every 5 ms (`tools/crepe_pitch.py`). The first
    versions used Praat's autocorrelation tracker, which on the separated backing stem fell to subharmonics in 18 % of
    its frames (E2 or A2 where the singer holds E4), so the backing-track lines were badly out of tune.
@@ -89,7 +92,9 @@ splits a phrase where the singer changes.
    units are cross-faded (the single-pass synthesis tried here sounded worse and was dropped). Consonants are timed the
    UTAU way (`retime`): each vowel stays on its note, and the consonants before it get natural lengths (stops and
    nasals ~70 ms, s/f/sh ~100 ms) taken from the end of the previous vowel; a phoneme aligner on its own gives every
-   consonant its 40 ms minimum, which crushed them ("hurricane" came out as "hair-uh-qu-tea"). The pitch is the
+   consonant its 40 ms minimum, which crushed them ("hurricane" came out as "hair-uh-qu-tea"). On a long note the
+   vowel's attack (the first 60 % of the sample) plays at its own speed and only the steady end stretches; stretching
+   the whole sample made every long note creep in (the banks' vowels swell) and then snap to the next syllable. The pitch is the
    singer's own curve, not note numbers, and a phrase's last note is held as long as the singer holds it, but never
    through a change to another note and never into the other singer's turn.
    **Pitch clean-up** (`tools/clean_pitch.py`): a separated stem's tracker sometimes jumps for a few frames to the

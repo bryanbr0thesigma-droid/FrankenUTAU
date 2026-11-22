@@ -32,8 +32,14 @@ IPA = {  # ARPAbet -> recogniser tokens accepted for it (espeak IPA)
 }
 
 
+# words whose first CMUdict entry is the wrong reading for this song
+PRON = {"live": ["l", "ih", "v"]}
+
+
 def word_phones(w: str, d) -> list[str]:
     key = re.sub(r"[^a-z']", "", w.lower())
+    if key in PRON:
+        return list(PRON[key])
     pr = d.get(key) or d.get(key.strip("'")) or []
     if not pr:
         return []

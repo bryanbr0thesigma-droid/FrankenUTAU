@@ -369,10 +369,17 @@ class Renderer:
         na = max(1, int(round((t_end - anchor) * 1000 / FP)))
         idx_b = np.linspace(0, P, nb, endpoint=False) if nb else np.zeros(0)
         fixed = C - P
+        rest, avail = na - fixed, N - 1 - C
         if na <= fixed:
             idx_a = P + np.arange(na)
+        elif rest <= avail:                                       # shorter than the sample: compress evenly
+            idx_a = np.concatenate([P + np.arange(fixed), np.linspace(C, N - 1, rest)])
         else:
-            idx_a = np.concatenate([P + np.arange(fixed), np.linspace(C, N - 1, na - fixed)])
+            # a long note: the vowel's attack (its first 60 %) plays at its own speed, like a singer's onset, and
+            # only the steady end stretches; stretching the whole sample made every long note creep in (the
+            # banks' vowels swell) and then snap to the next syllable
+            M = C + int(0.6 * avail)
+            idx_a = np.concatenate([P + np.arange(fixed), np.arange(C, M), np.linspace(M, N - 1, rest - (M - C))])
         idx = np.clip(np.round(np.concatenate([idx_b, idx_a])).astype(int), 0, N - 1)
         n = len(idx)
         fr = np.clip(((t_start * 1000 + np.arange(n) * FP) / FP).astype(int), 0, len(cents) - 1)
