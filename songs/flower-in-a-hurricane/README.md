@@ -76,8 +76,9 @@ splits a phrase where the singer changes.
    do the rest: vowels want voiced, loud frames and start on a note change or an attack (pitch step, spectral
    onset); s/t/k/f want unvoiced frames; a pause is anything 10–20 dB below the phrase around it. Vowels last at
    least 60–80 ms.
-4. **Pitch.** Praat's autocorrelation tracker on the lead vocal, every 5 ms, with octave errors folded back
-   (`follow.py pitch`).
+4. **Pitch.** CREPE (full model, Viterbi decoding) on each stem, every 5 ms (`tools/crepe_pitch.py`). The first
+   versions used Praat's autocorrelation tracker, which on the separated backing stem fell to subharmonics in 18 % of
+   its frames (E2 or A2 where the singer holds E4), so the backing-track lines were badly out of tune.
 5. **Singing (`follow2.py render`).** Each phrase becomes Arpasing units (`- k`, `k ae`, `ae t`, `t -` ...). Each
    unit's sample (WORLD analysis from Voice-2-utau's engine) is placed so its preutterance point lands exactly on the
    phoneme's start; when the sound before it is short, the lead-in is squeezed, never shifted. Neighbouring
@@ -98,6 +99,9 @@ splits a phrase where the singer changes.
    harmony the backing stem), gets a high-pass, a presence lift and a short room, and is levelled to where that
    original part sat; the vocal bus and the master are peak-limited.
 
+Tuning against CREPE's reading of the original voices: the opening solo is within a semitone 84 % of the time (it was
+40 %, 151 cents off on median), the 1:35 solo 96 % (was 49 %), SZA's lines about 90 %.
+
 Checks (`tools/diag.py`, `tools/lag.py`, `tools/spasm.py`, `tools/evalr.py`), against the isolated original vocals:
 the banks sing during 94 % of the original's sung time, start within a median of 10 ms of it, follow its loudness
 (correlation 0.88, same 16 dB range) and brightness (within a dB); pitch jumps inside held vowels are 2–3 % of the
@@ -112,13 +116,14 @@ and the short tag at 3:26–3:29, which no transcription pass could make out.
 ```bash
 pip install "audio-separator[cpu]" audioread pyworld praat-parselmouth transformers cmudict
 tools/separate.sh song.mp3 stems
-python tools/follow.py pitch stems/vocals.wav pitch.npy
+python tools/follow.py pitch stems/vocals.wav pitch.npy            # Praat curves: voicing priors for the aligner only
 python tools/follow.py pitch stems/lead.wav pitch_lead.npy
 python tools/follow.py pitch stems/backing.wav pitch_back.npy
-python tools/clean_pitch.py pitch_lead.npy pitch_back.npy pitch_lead_c.npy   # then alternate clean / fold a few times:
-python tools/clean_pitch.py pitch_back.npy pitch_lead.npy pitch_back_c.npy
-python tools/fold_pitch.py pitch_lead_c.npy pitch_lead_f.npy
-python tools/fold_pitch.py pitch_back_c.npy pitch_back_f.npy pitch_lead_f.npy
+python tools/crepe_pitch.py stems/lead.wav pitch_lead_f.npy          # the pitch the banks sing (CREPE), cleaned twice:
+python tools/crepe_pitch.py stems/backing.wav pitch_back_f.npy
+python tools/clean_pitch.py pitch_lead_f.npy pitch_back_f.npy pitch_lead_f.npy   # lead: blips + bleed check
+python tools/clean_pitch.py pitch_back_f.npy pitch_back_f.npy                    # backing: blips only (its solo lines
+                                                                                 # leave only bleed on the lead)
 # lyrics.json: {"sections": [{"t0", "t1", "lines": [...]}]}, written from the Whisper passes (tools/words2.py)
 python tools/follow2.py align stems/vocals.wav pitch.npy lyrics.json phones_vocals.json
 python tools/stem_sheets.py lyrics.json phones_vocals.json pitch_lead.npy pitch_back.npy .
