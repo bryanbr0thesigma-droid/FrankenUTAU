@@ -10,6 +10,8 @@
 //                                         earlier render; the rest is stream-copied, untouched
 //   node render.mjs --page index          the earlier original MV (Corrupt-Chan + Ping) instead of the
 //                                         reanimation (reanim.html, the default)
+//   node render.mjs --page flower --audio PATH --out flower-mv.mp4
+//                                         the Flower In A Hurricane cover MV (flower.html) with its own audio
 import { createRequire } from "node:module";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -31,7 +33,7 @@ function loadPlaywright() {
 
 const OUT = path.resolve(ROOT, args.outdir || "out");
 fs.mkdirSync(OUT, { recursive: true });
-const AUDIO = path.join(ROOT, "assets/signaling/signaling-rei-corrupt-FULL-MIX.wav");
+const AUDIO = args.audio ? path.resolve(String(args.audio)) : path.join(ROOT, "assets/signaling/signaling-rei-corrupt-FULL-MIX.wav");
 const PAGE = String(args.page || "reanim");
 
 const server = await startServer(+(args.port || 0));
@@ -97,7 +99,7 @@ async function main() {
   console.log(`rendering frames ${f0}..${f1 - 1} (${f1 - f0} frames) in ${bounds.length - 1} job(s)`);
   const t0 = Date.now();
   const parts = await Promise.all(bounds.slice(0, -1).map((a, j) => renderPart(a, bounds[j + 1], j, info.fps, t0, info.cuts)));
-  const name = args.out || (args.from || args.to ? `slice-${(f0 / info.fps).toFixed(1)}-${(f1 / info.fps).toFixed(1)}.mp4` : (PAGE === "reanim" ? "signaling-reanimation.mp4" : "signaling-mv.mp4"));
+  const name = args.out || (args.from || args.to ? `slice-${(f0 / info.fps).toFixed(1)}-${(f1 / info.fps).toFixed(1)}.mp4` : (PAGE === "reanim" ? "signaling-reanimation.mp4" : PAGE === "flower" ? "flower-in-a-hurricane-mv.mp4" : "signaling-mv.mp4"));
   const outFile = path.join(OUT, name);
   const list = path.join(OUT, "parts.txt");
   fs.writeFileSync(list, parts.map((p) => `file '${p}'`).join("\n"));

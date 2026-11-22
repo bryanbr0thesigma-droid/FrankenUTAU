@@ -249,10 +249,8 @@ def phrases2(words: list[dict], gap: float = 0.12, cents=None) -> list[list[list
                 continue
             tail = sum(p[2] - p[1] for p in phr[j + 1:])           # final consonants keep their length
             t = phr[j][2] + tail
-            while t < nxt and any(isv(t + d) for d in (0.0, 0.05, 0.1, 0.15, 0.2, 0.25)):
+            while t < nxt and (isv(t) or isv(t + 0.05)):
                 t += FP / 1000
-            while t > phr[j][2] + tail and not isv(t):                # end on the last voiced frame, not in the gap
-                t -= FP / 1000
             ext = min(t, nxt) - (phr[j][2] + tail)
             if ext > 0.03:
                 phr[j][2] += ext
@@ -319,51 +317,7 @@ class Renderer:
             y[-k:] *= np.cos(np.linspace(0, np.pi / 2, k)) ** 2
         return y
 
-    def frames(self, alias, t_start, anchor, t_end):
-        """WORLD frames (f0 of the sample, sp, ap) for one unit laid out from t_start to t_end, with the sample's
-        preutterance point on `anchor`: the lead-in is squeezed, the fixed part kept, the rest stretched"""
-        wav, (off, cons, cut, pre, ovl) = self.oto[alias]
-        f0, sp, ap, seg = self.eng.analyse(wav, off, cut)
-        N = len(f0)
-        P = min(N - 2, max(0, int(round(pre / FP))))
-        C = min(N - 2, max(P, int(round(cons / FP))))
-        nb = max(0, int(round((anchor - t_start) * 1000 / FP)))
-        na = max(1, int(round((t_end - anchor) * 1000 / FP)))
-        idx_b = np.linspace(0, P, nb, endpoint=False) if nb else np.zeros(0)
-        fixed = C - P
-        if na <= fixed:
-            idx_a = P + np.arange(na)
-        else:
-            idx_a = np.concatenate([P + np.arange(fixed), np.linspace(C, N - 1, na - fixed)])
-        idx = np.clip(np.round(np.concatenate([idx_b, idx_a])).astype(int), 0, N - 1)
-        f0u, spu, apu = f0[idx], sp[idx], ap[idx]
-        v = f0u > 0
-        G = self.bank_gain()
-        if os.environ.get("LEVEL", "0") == "0":                    # per-unit levelling: off (measured worse for BAKO)
-            return f0u, spu * G, apu
-        if v.sum() >= 4:                                          # level the unit, at most 9 dB off the bank's level
-            g = float(np.clip(1.0 / max(1e-20, float(np.median(spu[v].sum(1)))), G / 8, G * 8))
-        else:
-            g = G
-        return f0u, spu * g, apu
-
-    def bank_gain(self):
-        """level factor for units with (almost) no voiced frames: the bank's typical vowel level -> 1"""
-        if not hasattr(self, "_bank_gain"):
-            pows = []
-            for al in [a for a in self.oto if a.startswith("- ")][:40]:
-                wav, (off, cons, cut, pre, ovl) = self.oto[al]
-                f0, sp, ap, seg = self.eng.analyse(wav, off, cut)
-                if (f0 > 0).sum() >= 4:
-                    pows.append(np.median(sp[f0 > 0].sum(1)))
-            self._bank_gain = 1.0 / float(np.median(pows)) if pows else 1.0
-        return self._bank_gain
-
     def phrase(self, phr, cents, out):
-        """One phrase in ONE WORLD synthesis: the units' spectral envelopes and aperiodicity are blended over 40 ms
-        where they meet (in the log domain), and the glottal pulses run continuously through the whole phrase, so
-        joins cannot cancel or flutter the way cross-faded waveforms do."""
-        import pyworld as pw
         seq = units2(phr, self.oto)
         missing = [al for al, _ in seq if al not in self.oto]
         seq = [(al, t) for al, t in seq if al in self.oto]
@@ -374,67 +328,17 @@ class Renderer:
             pre = self.oto[al][1][3] / 1000
             room = (t - seq[i - 1][1]) * 0.7 if i else pre
             leads.append(min(pre, max(0.005, room)))
-        XF = 0.04
-        XFf = int(round(XF * 1000 / FP))
-        segs = []
+        XF = 0.03
         for i, (al, t) in enumerate(seq):
             t_start = t - leads[i]
-            t_end = (seq[i + 1][1] - leads[i + 1] + XF) if i + 1 < len(seq) else t + 0.18
-            t_end = max(t_end, t + 0.02)
-            st = int(round(t_start * 1000 / FP))
-            # the unit's frames, laid out from its own (rounded) start frame
-            segs.append((st, *self.frames(al, st * FP / 1000, t, t_end)))
-        F0 = min(sg[0] for sg in segs)
-        F1 = max(sg[0] + len(sg[1]) for sg in segs)
-        L, nbins = F1 - F0, segs[0][2].shape[1]
-        W = np.zeros(L)
-        LSP = np.zeros((L, nbins))
-        AP = np.zeros((L, nbins))
-        V = np.zeros(L)
-        for k, (st, f0s, sps, aps) in enumerate(segs):
-            n = len(f0s)
-            w = np.ones(n)
-            m = min(XFf, n)
-            if k > 0:
-                w[:m] = np.linspace(1.0 / (m + 1), 1, m)
-            if k < len(segs) - 1:
-                w[-m:] = np.minimum(w[-m:], np.linspace(1, 1.0 / (m + 1), m))
-            o = st - F0
-            W[o:o + n] += w
-            LSP[o:o + n] += w[:, None] * np.log(sps + 1e-16)
-            AP[o:o + n] += w[:, None] * aps
-            V[o:o + n] += w * (f0s > 0)
-        ok = W > 1e-9
-        Wd = np.where(ok, W, 1.0)
-        sp = np.where(ok[:, None], np.exp(LSP / Wd[:, None]), 1e-16)
-        ap = np.where(ok[:, None], np.clip(AP / Wd[:, None], 0.0, 1.0), 1.0)
-        fr = np.clip(F0 + np.arange(L), 0, len(cents) - 1)
-        hz = 440.0 * 2 ** ((cents[fr] / 100 - 69) / 12)
-        voiced = ok & (V / Wd > 0.5)
-        for p, ps, pe in phr:                                     # a sung vowel is voiced from end to end
-            if p in VOW and os.environ.get("VOICEFIX", "1") == "1":
-                a_, b_ = int(round(ps * 1000 / FP)) - F0 + 2, int(round(pe * 1000 / FP)) - F0 - 2
-                voiced[max(0, a_):max(0, min(L, b_))] = ok[max(0, a_):max(0, min(L, b_))]
-        i = 0
-        while i < L:                                              # bridge unvoiced gaps < 80 ms between voiced frames
-            if not voiced[i]:
-                j = i
-                while j < L and not voiced[j]:
-                    j += 1
-                if 0 < i and j < L and (j - i) * FP <= 80 and ok[i:j].all():
-                    voiced[i:j] = True
-                i = j
+            if i + 1 < len(seq):
+                t_end = seq[i + 1][1] - leads[i + 1] + XF
             else:
-                i += 1
-        f0 = np.where(voiced, hz, 0.0)
-        y = pw.synthesize(np.ascontiguousarray(f0), np.ascontiguousarray(sp), np.ascontiguousarray(ap), self.SR, FP)
-        a, b = min(len(y), int(0.005 * self.SR)), min(len(y), int(0.03 * self.SR))
-        y[:a] *= np.linspace(0, 1, a)
-        y[len(y) - b:] *= np.linspace(1, 0, b)
-        s = int(F0 * FP / 1000 * self.SR)
-        if s < 0:
-            y, s = y[-s:], 0
-        out[s:s + len(y)] += y[:max(0, len(out) - s)]
+                t_end = t + 0.18
+            t_end = max(t_end, t + 0.02)
+            y = self.unit(al, t_start, t, t_end, cents, XF)
+            s = int(t_start * self.SR)
+            out[s:s + len(y)] += y[:max(0, len(out) - s)]
         return missing
 
 
@@ -471,19 +375,12 @@ def follow_expression(y: np.ndarray, ref_wav: str, sr: int, effort: float = 0.5)
     dt = np.clip(dt * effort, -6, cap) * ("t" in os.environ.get("FOLLOW", "lt"))
     shape = np.clip((f - 700) / 1800, 0, 1)[:, None]          # 0 below 700 Hz, full from 2.5 kHz
     Y = Y * 10 ** (shape * dt[None, :] / 20)
-    # loudness: follow the reference envelope at ~35 ms, with a gentle slew limit (3 dB per 12 ms frame) and a
-    # bounded range, so swells and accents come through but a separation glitch cannot slam the level
+    # loudness: follow the reference envelope at 30 ms, full depth, where both sing
     ly2 = lvl(Y)
     k2 = np.ones(3) / 3
-    g = np.convolve(np.where(act, lr - ly2, 0.0), k2, "same") / np.maximum(np.convolve(act.astype(float), k2, "same"), 1e-3)
-    g = np.where(act, g, 0.0)
+    g = np.convolve(np.where(act, lr - ly2, 0.0), k2, "same")
     g -= np.median(g[act])                                      # the level itself is set in the mix
-    g = np.clip(g, -18, 10)
-    for i in range(1, len(g)):                                  # slew limit, both directions
-        g[i] = g[i - 1] + np.clip(g[i] - g[i - 1], -3.0, 3.0)
-    for i in range(len(g) - 2, -1, -1):
-        g[i] = g[i + 1] + np.clip(g[i] - g[i + 1], -3.0, 3.0)
-    g = g * ("l" in os.environ.get("FOLLOW", "lt"))
+    g = np.clip(g, -18, 12) * ("l" in os.environ.get("FOLLOW", "lt"))
     Y = Y * 10 ** (g[None, :] / 20)
     _, z = istft(Y, sr, nperseg=nfft, noverlap=nfft - hop)
     z = np.pad(z, (0, max(0, len(y) - len(z))))[:len(y)]

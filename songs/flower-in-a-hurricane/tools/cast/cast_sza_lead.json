@@ -1,6 +1,12 @@
 {
 "parts": [
 {
+"t0": 65.15,
+"t1": 68.992,
+"bank": "banks/BAKO_EN",
+"transpose": 0
+},
+{
 "t0": 68.992,
 "t1": 77.734,
 "bank": "banks/BAKO_EN",
