@@ -2,7 +2,8 @@
 sound exactly where the singer's was.
 
     python follow2.py align  VOCAL.wav pitch.npy lyrics.json phones.json   # segmental forced alignment
-    python follow2.py render phones.json pitch.npy cast.json out.wav         # exact-anchor Arpasing renderer
+    python follow2.py render phones.json pitch.npy cast.json out.wav [REF.wav]  # exact-anchor Arpasing renderer;
+                                                                               # REF: the original voice to follow
 
 lyrics.json: {"sections": [{"t0", "t1", "lines": [...]}]}. phones.json: [{"w", "phones": [[p, start, end], ...]}].
 
@@ -222,8 +223,9 @@ def align(vocal: str, pitch_npy: str, lyrics_json: str, out: str) -> None:
 
 
 # ------------------------------------------------------------------ phrases and units
-def phrases2(words: list[dict], gap: float = 0.12) -> list[list[list]]:
-    """phone runs from the aligner, split where it put a silence of more than `gap` s"""
+def phrases2(words: list[dict], gap: float = 0.12, cents=None) -> list[list[list]]:
+    """phone runs from the aligner, split where it put a silence of more than `gap` s; with `cents`, a phrase's last
+    vowel (or the vowel before its final consonants) is held for as long as the singer keeps a voiced note there"""
     ph = sorted([list(p) for w in words for p in w["phones"] if p[1] >= 0], key=lambda p: p[1])
     out, cur = [], []
     for p in ph:
@@ -235,6 +237,26 @@ def phrases2(words: list[dict], gap: float = 0.12) -> list[list[list]]:
         cur.append(p)
     if cur:
         out.append(cur)
+    if cents is not None:
+        v = cents > 0
+        isv = lambda t: v[min(len(v) - 1, max(0, int(t * 1000 / FP)))]
+        for i, phr in enumerate(out):
+            nxt = out[i + 1][0][1] - 0.06 if i + 1 < len(out) else phr[-1][2] + 3.0
+            j = len(phr) - 1
+            while j > 0 and phr[j][0] not in VOW:
+                j -= 1
+            if phr[j][0] not in VOW:
+                continue
+            tail = sum(p[2] - p[1] for p in phr[j + 1:])           # final consonants keep their length
+            t = phr[j][2] + tail
+            while t < nxt and (isv(t) or isv(t + 0.05)):
+                t += FP / 1000
+            ext = min(t, nxt) - (phr[j][2] + tail)
+            if ext > 0.03:
+                phr[j][2] += ext
+                for p in phr[j + 1:]:
+                    p[1] += ext
+                    p[2] += ext
     return out
 
 
@@ -320,11 +342,56 @@ class Renderer:
         return missing
 
 
-def render(phones_json: str, pitch_npy: str, cast_json: str, out: str) -> None:
+def follow_expression(y: np.ndarray, ref_wav: str, sr: int, effort: float = 0.5) -> np.ndarray:
+    """Make a rendered part sing like the original: its loudness follows the reference voice syllable by syllable
+    (30 ms envelope), and its brightness (1-5 kHz against the lows) follows the reference's, so where the singer
+    pushes, the bank pushes. Brightness is matched on average too (the banks are duller than the singers)."""
+    from scipy.signal import istft, stft
+    r, rsr = sf.read(ref_wav, dtype="float32", always_2d=True)
+    r = r.mean(1)
+    if rsr != sr:
+        r = resample_poly(r, sr, rsr)
+    r = np.pad(r, (0, max(0, len(y) - len(r))))[:len(y)]
+    nfft, hop = 2048, 512
+    f, _, Y = stft(y, sr, nperseg=nfft, noverlap=nfft - hop)
+    _, _, Rr = stft(r, sr, nperseg=nfft, noverlap=nfft - hop)
+    n = min(Y.shape[1], Rr.shape[1])
+    Y, Rr = Y[:, :n], Rr[:, :n]
+    hi = (f >= 1000) & (f < 5000)
+    lo = (f >= 80) & (f < 1000)
+    def tilt(S):
+        P = np.abs(S) ** 2
+        return 10 * np.log10(P[hi].sum(0) + 1e-12) - 10 * np.log10(P[lo].sum(0) + 1e-12)
+    def lvl(S):
+        return 10 * np.log10((np.abs(S) ** 2).sum(0) + 1e-12)
+    ly, lr = lvl(Y), lvl(Rr)
+    act = (ly > ly.max() - 45) & (lr > lr.max() - 45)
+    if act.sum() < 10:
+        return y
+    k = np.ones(9) / 9                                          # ~100 ms smoothing for the brightness follow
+    dt = np.convolve(np.where(act, tilt(Rr) - tilt(Y), 0.0), k, "same") / np.maximum(np.convolve(act.astype(float), k, "same"), 1e-3)
+    effort = float(os.environ.get("EFFORT", effort))
+    cap = float(os.environ.get("EFFORT_CAP", 12))
+    dt = np.clip(dt * effort, -6, cap) * ("t" in os.environ.get("FOLLOW", "lt"))
+    shape = np.clip((f - 700) / 1800, 0, 1)[:, None]          # 0 below 700 Hz, full from 2.5 kHz
+    Y = Y * 10 ** (shape * dt[None, :] / 20)
+    # loudness: follow the reference envelope at 30 ms, full depth, where both sing
+    ly2 = lvl(Y)
+    k2 = np.ones(3) / 3
+    g = np.convolve(np.where(act, lr - ly2, 0.0), k2, "same")
+    g -= np.median(g[act])                                      # the level itself is set in the mix
+    g = np.clip(g, -18, 12) * ("l" in os.environ.get("FOLLOW", "lt"))
+    Y = Y * 10 ** (g[None, :] / 20)
+    _, z = istft(Y, sr, nperseg=nfft, noverlap=nfft - hop)
+    z = np.pad(z, (0, max(0, len(y) - len(z))))[:len(y)]
+    return z.astype("float32")
+
+
+def render(phones_json: str, pitch_npy: str, cast_json: str, out: str, ref_wav: str = "") -> None:
     words = json.load(open(phones_json))
     cents = np.load(pitch_npy).astype("float64")
     cast = json.load(open(cast_json))
-    phr_all = phrases2(words)
+    phr_all = phrases2(words, cents=cents)
     total = max(p[-1][2] for p in phr_all) + 2.0
     mix = None
     for bank in sorted({p["bank"] for p in cast["parts"]}):
@@ -353,6 +420,8 @@ def render(phones_json: str, pitch_npy: str, cast_json: str, out: str) -> None:
                 n_units += len(g) + 1
         print(bank, n_units, "units, missing:", missing)
         y = y[:int(total * R.SR)]
+        if ref_wav:
+            y = follow_expression(y, ref_wav, R.SR)
         peak = float(np.abs(y).max()) or 1.0
         y = (y / peak * 0.89).astype("float32")
         mix = y if mix is None else mix[:len(y)] + y[:len(mix)]

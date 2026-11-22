@@ -5,6 +5,7 @@
 Each vocal follows the reference vocal's loudness (phrase level + a slow envelope), gets a high-pass, a short
 stereo room and a level that puts it where the original vocal sat over the same instrumental.
 """
+import os
 import sys
 
 import numpy as np
@@ -74,7 +75,7 @@ for spec in sys.argv[4:]:
     assert ysr == sr, (p, ysr)
     y = np.pad(y, (0, max(0, N - len(y))))[:N]
     y = sosfiltfilt(hp, y)
-    y = y + 0.5 * sosfiltfilt(presence, y)                      # ~ +3.5 dB presence: the synth banks are dull up there
+    y = y + float(os.environ.get("MIX_PRESENCE", 0.5)) * sosfiltfilt(presence, y)   # presence lift (0 when the render already matches)
     # slow envelope of the original (cube-root, so it shapes phrases without pumping on syllables)
     ye = env(y, 0.25)
     on = ye > ye.max() * 10 ** (-45 / 20)

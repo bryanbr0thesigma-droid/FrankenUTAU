@@ -19,7 +19,7 @@ import numpy as np
 FP = 5.0
 MIN_RUN = 1.5
 phl, phb, plead, pback, vj, outdir = sys.argv[1:7]
-BANKS = {"sza": ("banks/BAKO_EN", 0), "parker": ("banks/Puresu_EN", -12)}
+BANKS = {"sza": ("banks/BAKO_EN", 0), "parker": ("banks/Puresu_EN", 0)}   # both at the singers' own pitch
 L, B = np.load(plead).astype(float), np.load(pback).astype(float)
 vid = json.load(open(vj))["stems"]
 def load_words(p):

@@ -15,9 +15,9 @@ Only two people sing on the track: Kevin Parker (Tame Impala) and SZA. King Gizz
 for guitar and co-writing. So the two banks take the two voices:
 
 * **BAKO = SZA**, at her pitch (BAKO's samples sit at C4; her lines run C#4–G#4).
-* **Puresu = Kevin Parker**, an octave down (Puresu's samples sit at B2): his lead lines, and his harmony under SZA,
-  which follows the backing stem's pitch (mostly a third below her, a sixth below in the bridge, a third above his
-  own lead at 1:42).
+* **Puresu = Kevin Parker**, at Parker's own pitch (his falsetto, well above Puresu's B2 samples): his lead lines, and
+  his harmony under SZA, which follows the backing stem's pitch (mostly a third below her, a sixth below in the
+  bridge, a third above his own lead at 1:42).
 
 Who sings what, worked out from the audio (see below):
 
@@ -69,14 +69,18 @@ splits a phrase where the singer changes.
 5. **Singing (`follow2.py render`).** Each phrase becomes Arpasing units (`- k`, `k ae`, `ae t`, `t -` ...). Each
    unit's sample (WORLD analysis from Voice-2-utau's engine) is placed so its preutterance point lands exactly on the
    phoneme's start; when the sound before it is short, the lead-in is squeezed, never shifted. The pitch is the
-   singer's own curve, not note numbers.
+   singer's own curve, not note numbers, and a phrase's last note is held as long as the singer holds it.
+   **Expression**: each part then follows its original voice the way a tuner draws dynamics and tension: loudness
+   syllable by syllable (30 ms), and brightness (1–5 kHz against the lows, at half depth), so where the singer
+   pushes, the bank pushes; the banks' duller tone is brought up to the singers' on average.
 6. **Mix.** `tools/mix.py`: each part follows its original's phrase loudness (lead parts the lead stem, Parker's
    harmony the backing stem), gets a high-pass, a presence lift and a short room, and is levelled to where that
    original part sat; the vocal bus and the master are peak-limited.
 
-Checks: the parts start within a median of 10 ms of the original voices (`tools/lag.py`), follow their pitch to
-7–9 cents, and a phoneme recogniser reads the lead parts about as well as the isolated original lead
-(`tools/evalr.py`). The banks themselves are fully synthesised (console sounds over a formant voice), so they will
+Checks (`tools/diag.py`, `tools/lag.py`, `tools/evalr.py`), against the isolated original vocals: the banks sing during
+96 % of the original's sung time, start within a median of 10 ms of it, follow the pitch to 4–5 cents in the same
+octave, follow its loudness with a correlation of 0.92 (0.94 for the lead parts) over the same 16 dB range, and match
+its brightness within a dB; a phoneme recogniser reads them about as well as the isolated original. The banks themselves are fully synthesised (console sounds over a formant voice), so they will
 never be as clear as a recorded singer.
 
 Not included: two unworded stretches at 2:20–2:25 and 3:14–3:17 that sound like flat synth tones rather than voice,
@@ -99,8 +103,8 @@ python tools/fetch_refs.py refs && audio-separator refs/*.mp3 -m Kim_Vocal_2.onn
 python tools/voiceid.py refs/voc voiceid.json stems/lead.wav stems/backing.wav
 python tools/make_cast.py phones_lead.json phones_back.json pitch_lead.npy pitch_back.npy voiceid.json tools/cast
 # banks/BAKO_EN and banks/Puresu_EN unzipped from Voice-2-utau's banks/; V2U=path to a Voice-2-utau checkout
-python tools/follow2.py render phones_lead.json pitch_lead.npy tools/cast/cast_sza_lead.json sza.wav
-python tools/follow2.py render phones_lead.json pitch_lead.npy tools/cast/cast_parker_lead.json parker.wav
-python tools/follow2.py render phones_back.json pitch_back.npy tools/cast/cast_parker_harm.json harmony.wav
-python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:3 parker.wav:3 harmony.wav:0:0.25:stems/backing.wav
+python tools/follow2.py render phones_lead.json pitch_lead.npy tools/cast/cast_sza_lead.json sza.wav stems/lead.wav
+python tools/follow2.py render phones_lead.json pitch_lead.npy tools/cast/cast_parker_lead.json parker.wav stems/lead.wav
+python tools/follow2.py render phones_back.json pitch_back.npy tools/cast/cast_parker_harm.json harmony.wav stems/backing.wav
+MIX_PRESENCE=0 python tools/mix.py stems/instrumental.wav stems/lead.wav cover.wav sza.wav:2 parker.wav:2 harmony.wav:0:0.25:stems/backing.wav
 ```
