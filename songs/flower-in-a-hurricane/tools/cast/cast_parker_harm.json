@@ -1,110 +1,62 @@
 {
 "parts": [
 {
-"t0": 65.392,
-"t1": 78.82,
+"t0": 65.19,
+"t1": 91.401,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 80.433,
-"t1": 88.023,
+"t0": 91.561,
+"t1": 114.44,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 88.524,
-"t1": 90.967,
+"t0": 126.311,
+"t1": 127.713,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 91.888,
-"t1": 91.97,
+"t0": 128.033,
+"t1": 130.656,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 92.15,
-"t1": 94.714,
+"t0": 130.897,
+"t1": 132.619,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 95.895,
-"t1": 96.706,
+"t0": 133.019,
+"t1": 142.58,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 102.685,
-"t1": 104.026,
+"t0": 149.01,
+"t1": 156.593,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 105.068,
-"t1": 110.337,
+"t0": 157.093,
+"t1": 161.835,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 126.352,
-"t1": 126.632,
+"t0": 162.035,
+"t1": 178.65,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 },
 {
-"t0": 126.812,
-"t1": 127.513,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 128.054,
-"t1": 129.616,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 131.138,
-"t1": 140.35,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 149.672,
-"t1": 156.582,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 157.102,
-"t1": 159.445,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 160.867,
-"t1": 161.568,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 161.889,
-"t1": 171.827,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 172.348,
-"t1": 178.99,
-"bank": "banks/Puresu_EN",
-"transpose": -12
-},
-{
-"t0": 207.961,
-"t1": 208.852,
+"t0": 194.498,
+"t1": 198.037,
 "bank": "banks/Puresu_EN",
 "transpose": -12
 }
