@@ -23,6 +23,18 @@ the harmony that doubles it (`tools/edit_lyrics.py`):
 
 Every other line is as written.
 
+## Fixes after listening
+
+`tools/fix_whisper_fall.py`:
+
+* **2:38, first "keep dancin', Harlequin contraption":** this line moved from Main 2 to the Whisper track, so it is
+  whispered like the verse 2 lines. The Whisper track has full breathiness and voicing at 0. The repeat at 2:42 stays
+  sung.
+* **3:11, the long "woah" at the end:** the note now slowly loses its pitch, like a wind-up toy running down. It holds
+  for a moment, then sinks, slowly at first and faster toward the end, one octave down by the end of the note. The
+  lead and all three harmonies follow the same curve, so the chord sinks together. Measured on the render, the lead
+  goes from G#5 to about A4 by 3:19.
+
 ## How it was made
 
 1. `for_basic.py` converted the project for SynthV Basic and moved all seven tracks (Main 1, Main 2, Whisper, three
@@ -30,7 +42,7 @@ Every other line is as written.
 2. `tools/edit_lyrics.py` swapped the words and cleared the old phonemes, so Maki's English dictionary pronounces the
    new ones. It also removed 4 per-note language overrides, because Basic renders those notes silent.
 3. Basic only renders 3 tracks at a time, so the song was rendered in three passes (tracks 0-2, 3-5, 6).
-   `tools/notecheck.py` confirmed every note in every track has sound.
+   `tools/notecheck.py project.svp 0:main1.wav 1:main2.wav ...` confirmed every note in every track has sound.
 4. The passes were summed at the project's track volumes. A gentle compressor went on the vocal bus (3:1, plus a
    peak catch), because the four parts stack their peaks on harmony words like "contraption". The instrumental went
    in 2.5 dB lower so the limiter barely works.
