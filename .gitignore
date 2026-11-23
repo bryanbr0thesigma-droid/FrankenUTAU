@@ -13,3 +13,5 @@ deployStorybook.yml
 # SynthV Lite voicebanks: free to use, not ours to redistribute (AH-Software terms), kept out of the repo
 synthv-voices/
 __pycache__/
+# 3D models with no-redistribution licenses (e.g. AHS official Maki MMD), kept out of the repo
+local-models/
