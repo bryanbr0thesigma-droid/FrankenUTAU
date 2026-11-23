@@ -7,8 +7,23 @@ Basic, using the song's SynthV project (originally voiced by Kasane Teto) and it
 | --- | --- |
 | `harlequin-contraption-maki-cover.mp3` | the cover: Maki over the mastered instrumental |
 | `harlequin-contraption-maki-acapella.mp3` | Maki only, all seven parts |
+| `harlequin-contraption-lyric-video.mp4` | lyric video: the cover with the lyrics on a black screen |
 
 The SynthV project and the instrumental came from a shared folder and are not in this repo.
+
+## Lyric video
+
+The video is text on black, nothing else:
+
+* It opens with a disclaimer: "I changed some of the lyrics in this cover for religious reasons."
+* Then the title appears.
+* The lyrics are karaoke style: each word turns gold as Maki sings it, the next line shows smaller below, and the
+  whispered lines are lilac and italic. The rewritten lines appear as sung.
+* The credits at the end repeat the disclaimer.
+
+`tools/lyric_times.py` times every line of the lyrics file to the project's notes (all 79 lines matched word for word)
+and writes `lyrics.json`. `tools/lyric_video.py lyrics.json cover.wav out.mp4` burns the subtitles in with ffmpeg
+(libass), which takes about 30 seconds.
 
 ## Changed lines
 
