@@ -12,3 +12,4 @@ deployStorybook.yml
 /docs/storybook
 # SynthV Lite voicebanks: free to use, not ours to redistribute (AH-Software terms), kept out of the repo
 synthv-voices/
+__pycache__/
