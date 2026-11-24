@@ -8,8 +8,34 @@ Basic, using the song's SynthV project (originally voiced by Kasane Teto) and it
 | `harlequin-contraption-maki-cover.mp3` | the cover: Maki over the mastered instrumental |
 | `harlequin-contraption-maki-acapella.mp3` | Maki only, all seven parts |
 | `harlequin-contraption-lyric-video.mp4` | lyric video: the cover with the lyrics on a black screen |
+| `harlequin-contraption-maki-mv-480p.mp4` | the original MV recolored for Maki, with the cover (480p, small enough for jsDelivr) |
+| `harlequin-contraption-maki-mv-720p.mp4` | the same at 720p |
 
-The SynthV project and the instrumental came from a shared folder and are not in this repo.
+The SynthV project, the instrumental and the original MV came from a shared folder and are not in this repo.
+
+## The original MV, recolored for Maki
+
+Vane Lily's MV (animation by nezzu) with these changes:
+
+* **Maki's colors.** Every frame goes through a color lookup table (`tools/maki_lut.py`), built from her official
+  model's textures: pinks become gold (her hair), purples become greys (her outfit), teal becomes red (her accents),
+  and lavender whites become cream. Perceived lightness is kept, so every line and shape reads as before. Teto comes
+  out blonde, with red face marks.
+* **The YouTube section (0:15-0:32) is @bryanbr0music's channel.** The avatar and channel name under the player, the
+  "From bryanbr0music" chip and the channel line under each sidebar video all change. The video's title becomes
+  "Harlequin Contraption ft. Tsurumaki Maki", in the player, on the page, in its upside-down glitch copy and in the
+  sidebar entry.
+* **The credit reads "vocal Tsurumaki Maki".** The closing STARRING sign reads "TSURUMAKI / MAKI". The sign's cross
+  (the T of "TETO", which turns upside down at 3:25) is gone with the old name.
+* **The three rewritten lines are on screen as sung:** "INVITE THIS CROWD / TO DANCE TONIGHT" (1:22), "Free thy body
+  and thy mind" (2:57) and "Lift up this soul into the light" (3:00). The old words are found by color and erased
+  (inpainted). The new ones are drawn in a similar style, and they assemble and scatter when the originals did.
+* **The audio is the Maki cover**, delayed 70 ms to the MV's timing (measured against the instrumental, constant over
+  the song).
+
+`tools/mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --out out.mp4` does
+it all. `--stills 18,83.5` gives check frames. Fonts: Luckiest Guy, Chewy, Pirata One and M PLUS Rounded 1c
+(fontsource, converted to TTF).
 
 ## Lyric video
 
