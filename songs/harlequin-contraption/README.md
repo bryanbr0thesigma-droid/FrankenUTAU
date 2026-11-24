@@ -35,8 +35,20 @@ Vane Lily's MV (animation by nezzu) with these changes:
   | Collared, FIRE!!! | Signaling Remix (feat. Adachi Rei & Corrupt-Chan) |
 
   The thumbnails come from the Welcome To The Internet MV (pixel Teto), the Signaling reanimation (Corrupt-Chan) and a
-  placeholder title card for LEMONADE. Each entry is found by its title text, which stays still while the thumbnails
-  animate. Its thumbnail is replaced inside the hand-drawn border, and its text is rewritten (title, channel, age).
+  placeholder title card for LEMONADE.
+
+  How the sidebar is replaced, in every frame of 0:16-0:28:
+
+  * **The layout.** The sidebar has five scroll layouts. Each frame is matched to one, and through unreadable glitch
+    frames the last one is held. The layout says which video sits in which slot.
+  * **Text.** Each slot's text block and thumbnail are found in the frame. If they don't line up, the layout's own
+    positions are used, shifted. All the original sidebar text in the column is erased every frame. The new title,
+    channel and age are drawn with a slight hand-drawn wobble that boils on twos.
+  * **Thumbnails.** Each new thumbnail is drawn row by row between the original thumbnail's own edges in that row. So
+    it keeps the original's rough paper edge, and in the glitch frames its torn rows. The pictures get Maki's palette
+    and a flat, inked cartoon look, and they boil with the page.
+  * **Overlays.** Orange drawn over the page stays on top: the light rays at 0:17 and the flying lyric letters.
+  * **Glitch copy.** The upside-down copy of the sidebar from 0:28 gets the same titles, flipped.
 * **No pentagrams.** The pentagram under Teto at 2:54 and the one on the stage floor at 3:22 are erased. Their thin gold
   strokes are found by color and shape, so candles, flames and faces stay.
 * **Cleaner erasing.** Inpainted areas get the paper grain back, so they don't show as smooth patches. The new credit

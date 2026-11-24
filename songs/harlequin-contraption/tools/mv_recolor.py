@@ -217,6 +217,132 @@ def paste(frame, layer, center, flip_v=False):
     frame[y0:y1, x0:x1] = np.asarray(sub.convert("RGB"))
 
 
+
+# ---------------------------------------------------------------- the sidebar
+def row_runs(flags, gap):
+    """(start, end) of runs of True, bridging gaps up to `gap`"""
+    out, start, last = [], None, None
+    for i, v in enumerate(flags):
+        if v:
+            if start is None:
+                start = i
+            last = i
+        elif start is not None and i - last > gap:
+            out.append((start, last))
+            start = None
+    if start is not None:
+        out.append((start, last))
+    return out
+
+
+def side_text_blocks(fr, y_lo=150, y_hi=1080):
+    """the text blocks of the sidebar videos: rows of light, unsaturated text in the text column"""
+    h, s, v = hsv(fr[y_lo:y_hi, 1726:1918])
+    rows = ((v > 0.45) & (s < 0.3)).sum(1) > 2
+    return [(a + y_lo, b + y_lo) for a, b in row_runs(rows, 16) if b - a > 18]
+
+
+def side_thumbs(fr):
+    """vertical extents of the sidebar thumbnails"""
+    rows = hsv(fr[150:1080, 1365:1705])[2].mean(1) > 0.2
+    return [(a + 150, b + 150) for a, b in row_runs(rows, 3) if b - a > 120]
+
+
+def cartoon(img):
+    """a thumbnail drawn like the MV: flat colours, inked edges"""
+    a = img
+    for _ in range(2):
+        a = cv2.bilateralFilter(a, 9, 60, 9)
+    z = a.reshape(-1, 3).astype(np.float32)
+    _, lab, cen = cv2.kmeans(z, 10, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0), 3,
+                             cv2.KMEANS_PP_CENTERS)
+    a = cen[lab.flatten()].reshape(a.shape).astype(np.uint8)
+    edges = cv2.adaptiveThreshold(cv2.medianBlur(cv2.cvtColor(img, cv2.COLOR_RGB2GRAY), 5), 255,
+                                  cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 4)
+    a[edges == 0] = (24, 20, 18)
+    return a
+
+
+def boil(img, phase, amp=1.4):
+    """hand-drawn boil: a small smooth wobble that changes every phase"""
+    h, w = img.shape[:2]
+    rng = np.random.default_rng(1000 + phase)
+    dx = cv2.resize(rng.normal(0, amp, (6, 10)).astype(np.float32), (w, h), interpolation=cv2.INTER_CUBIC)
+    dy = cv2.resize(rng.normal(0, amp, (6, 10)).astype(np.float32), (w, h), interpolation=cv2.INTER_CUBIC)
+    xx, yy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    return cv2.remap(img, xx + dx, yy + dy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+
+def put_thumb(fr, y0, y1, img, phase):
+    """Replace the sidebar thumbnail between rows y0..y1 with img. Each row is filled between the original
+    thumbnail's own left and right edge in that row, so the new picture keeps the original's rough paper edge and,
+    in the glitch frames, its torn rows (rows that jump sideways move the new picture with them)."""
+    Y0, Y1, X0, X1 = max(0, y0 - 14), min(HEI, y1 + 14), 1338, 1726
+    sub = fr[Y0:Y1, X0:X1]
+    h, s, v = hsv(sub)
+    # orange drawn over the page (light rays, the lyric's flying letters) must stay on top of the new picture
+    XO = X0 - 1000
+    hw, sw, vw = hsv(fr[Y0:Y1, 1000:X1])
+    orange_w = (hw > 15) & (hw < 45) & (sw > 0.6) & (vw > 0.7)
+    orange = orange_w[:, XO:]
+    chunky = cv2.morphologyEx(orange_w[:, :XO].astype(np.uint8), cv2.MORPH_OPEN,
+                              cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
+    lrow = cv2.dilate((chunky.sum(1) > 12).astype(np.uint8)[:, None], np.ones((91, 1), np.uint8))[:, 0] > 0
+    # the thumbnail's silhouette: its light pixels, with the dark parts inside it closed up (sideways first, so the
+    # row edges, and with them any glitch tearing, stay where they are)
+    m = cv2.morphologyEx((v > 0.2).astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((1, 81), np.uint8))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((31, 1), np.uint8))
+    rows = np.nonzero(m.sum(1) > 150)[0]
+    rows = rows[(rows >= y0 - Y0 - 8) & (rows <= y1 - Y0 + 8)]
+    if len(rows) < 80:
+        return
+    xl = np.full(len(sub), -1)
+    xr = np.full(len(sub), -1)
+    for r in rows:
+        xs = np.nonzero(m[r])[0]
+        xl[r], xr[r] = xs[0], xs[-1] + 1
+    base_l, base_r = int(np.median(xl[rows])), int(np.median(xr[rows]))
+    top, bot = int(rows[0]), int(rows[-1])
+    W_, H_ = base_r - base_l, bot - top + 1
+    if W_ < 200 or H_ < 100:
+        return
+    rng = np.random.default_rng(2000 + phase)
+    pic = boil(cv2.resize(img, (W_, H_), interpolation=cv2.INTER_AREA), phase)
+    pic = np.clip(pic.astype(np.float32) + rng.normal(0, 3.5, pic.shape[:2])[..., None], 0, 255).astype(np.uint8)
+    region = np.zeros(sub.shape[:2], bool)
+    canvas = sub.copy()
+    for r in range(top, bot + 1):
+        if xl[r] < 0:
+            continue
+        shift = xl[r] - base_l if abs(xl[r] - base_l) > 4 else 0           # torn rows move sideways
+        a_, b_ = max(0, xl[r]), min(sub.shape[1], xr[r])
+        src = np.arange(a_, b_) - base_l - shift
+        ok = (src >= 0) & (src < W_)
+        canvas[r, a_:b_][ok] = pic[r - top, src[ok]]
+        region[r, a_:b_] = True
+    # which orange shapes are overlays: they reach outside the thumbnail, or are letter-sized in a lyric row
+    n, lab, st, _ = cv2.connectedComponentsWithStats(orange_w.astype(np.uint8), connectivity=8)
+    inside = np.zeros(orange_w.shape, bool)
+    inside[:, XO:] = near(region, 10)
+    outside_px = np.bincount(lab[~inside & (lab > 0)], minlength=n)
+    keep = outside_px > 30
+    rows_c = st[:, cv2.CC_STAT_TOP] + st[:, cv2.CC_STAT_HEIGHT] // 2
+    keep |= (st[:, cv2.CC_STAT_HEIGHT] < 90) & (st[:, cv2.CC_STAT_WIDTH] < 120) & (st[:, cv2.CC_STAT_AREA] > 150) \
+        & lrow[np.clip(rows_c, 0, len(lrow) - 1)]
+    keep[0] = False
+    letters = near(keep[lab][:, XO:], 2)
+    # cover what is left of the original around it (its rim and dark outline) with the page background
+    cover = near(region, 6) & ~region & ~letters
+    bg = np.median(sub[(v < 0.2) & ~near(region, 10)], axis=0) if ((v < 0.2) & ~near(region, 10)).any() else np.array([26, 22, 20])
+    noise = rng.normal(0, 3.0, sub.shape[:2])[..., None]
+    canvas[cover] = np.clip(bg + noise[cover], 0, 255).astype(np.uint8)
+    edge = region & ~cv2.erode(region.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))).astype(bool)
+    canvas[edge] = (20, 16, 14)                                          # inked rim
+    canvas[letters] = sub[letters]
+    fr[Y0:Y1, X0:X1] = canvas
+
+
 # ---------------------------------------------------------------- frames
 def frames(mv, lut, t0, t1):
     t0 = round(t0 * FPS) / FPS                       # stay on the frame grid, so frame numbers never collide
@@ -361,6 +487,20 @@ def run(args):
     f_side_ch = ImageFont.truetype(font["m-plus-rounded-1c"], 18)
     t_main = {k: TextBlock([v], JP if k == "lemonade" else font["m-plus-rounded-1c"], 34, CREAM, max_w=880, align="left")
               for k, v in SONGS.items()}
+    def lut_img(im):                                     # the thumbnails get Maki's palette like everything else
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{im.width}x{im.height}",
+                              "-i", "-", "-vf", f"lut3d={args.lut}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                             input=np.asarray(im).tobytes(), capture_output=True, check=True).stdout
+        return np.frombuffer(raw, np.uint8).reshape(im.height, im.width, 3).copy()
+    thumb_art = {k: cartoon(lut_img(im)) for k, im in thumbs.items()}
+    LAYOUTS = {"A": (16.5, ["lose", "lovebug", "fire"]), "B": (18.0, ["harl", "laugh", "collared"]),
+               "C": (25.2, ["harl", "collared", "lovebug"]), "D": (26.5, ["harl", "lovebug", "laugh"]),
+               "E": (27.5, ["harl", "lovebug", "laugh"])}
+    ENTRY = {"harl": ("harl", "1 day ago")} | {k: (SWAP[k], AGE[k]) for k in SWAP}
+    FLIPPED = [("wtti", "3 months ago"), ("signaling", "11 months ago"), ("lemonade", "2 months ago")]
+    f_title = {k: fnt(k, 21) for k in SONGS}
+    f_title["harl"] = ImageFont.truetype(font["m-plus-rounded-1c"], 21)
+    TITLE_OF = dict(SONGS) | {"harl": NEW_TITLE}
 
     if args.stills:
         times = [float(x) for x in args.stills.split(",")]
@@ -383,6 +523,87 @@ def run(args):
     side_tpl = ref[309:331, 1735:1843].copy()                        # "Vane Lily" under a sidebar video
     harl_tpl = ref[222:302, 1735:1880].copy()                        # "Harlequin / Contraption ft / Kasane Teto"
     chip_tpl = ref[134:170, 1378:1595].copy()                        # "From Vane Lily"
+    side_col = lambda f: cv2.cvtColor(f[60:1080, 1360:1920], cv2.COLOR_RGB2GRAY)[::4, ::4].astype(np.float32)
+    layout_ref = {k: side_col(next(frames(args.mv, args.lut, tt, tt + 1 / FPS))[1])[10:-10, 10:-10] for k, (tt, _) in LAYOUTS.items()}
+    held = {"layout": None, "t": -9, "dy": 0}
+    layout_geom = {}
+    for k, (tt, _) in LAYOUTS.items():                       # each layout's text blocks and thumbnails, from its reference
+        rf = next(frames(args.mv, args.lut, tt, tt + 1 / FPS))[1]
+        layout_geom[k] = (side_text_blocks(rf), side_thumbs(rf))
+        assert len(layout_geom[k][0]) == 3 and len(layout_geom[k][1]) == 3, (k, layout_geom[k])
+
+    def which_layout(fr, t):
+        """(layout, vertical offset) of the sidebar on screen; holds the last one through unreadable frames"""
+        c = side_col(fr)
+        best = (-1, None, 0)
+        for k, r in layout_ref.items():
+            _, mx, _, loc = cv2.minMaxLoc(cv2.matchTemplate(c, r, cv2.TM_CCOEFF_NORMED))
+            if mx > best[0]:
+                best = (mx, k, (loc[1] - 10) * 4)
+        if best[0] >= 0.5:
+            held.update(layout=best[1], t=t, dy=best[2])
+            return best[1], best[2]
+        return (held["layout"], held["dy"]) if t - held["t"] < 0.3 else (None, 0)
+
+    def slots(found, ref, dy):
+        """use the blocks found in this frame when they line up with the layout, else the layout's own (shifted)"""
+        if len(found) == 3 and all(abs(f[0] - (r[0] + dy)) < 40 for f, r in zip(found, ref)):
+            return found
+        return [(a + dy, b + dy) for a, b in ref]
+
+    def entry_text(key, song, age, x, top, phase, flip=False, height=None):
+        f = f_title[song if song in f_title else key]
+        lines = wrap(TITLE_OF[song], f, 182)
+        while len(lines) > 3:
+            f = ImageFont.truetype(f.path, f.size - 1)
+            lines = wrap(TITLE_OF[song], f, 182)
+        items = [(l, f, CREAM, 28) for l in lines] + [(CHANNEL, f_side_ch, UI_GREY, 28), (age, f_side_ch, UI_GREY, 28)]
+        rng = np.random.default_rng(3000 + phase + top)
+        jx, jy = int(rng.integers(-1, 2)), int(rng.integers(-1, 2))
+        if not flip:
+            fr = fr_cur[0]
+            H = int(sum(it[3] for it in items)) + 10
+            X, Y = int(x + jx) - 4, int(top - 3 + jy) - 4
+            im = Image.new("L", (200, H + 8), 0)
+            col = Image.new("RGB", (200, H + 8), (0, 0, 0))
+            d, dc = ImageDraw.Draw(im), ImageDraw.Draw(col)
+            yy = 4
+            for text, ff, cc, lh in items:
+                d.text((4, yy), text, font=ff, fill=255)
+                dc.text((4, yy), text, font=ff, fill=cc)
+                yy += lh
+            a_ = boil(np.asarray(im), phase, 0.7)                           # a little hand-drawn wobble, like the page
+            c_ = boil(np.asarray(col), phase, 0.7)
+            Y1_, X1_ = min(HEI, Y + a_.shape[0]), min(WID, X + a_.shape[1])
+            al = (a_[:Y1_ - Y, :X1_ - X].astype(np.float32) / 255)[..., None]
+            fr[Y:Y1_, X:X1_] = (fr[Y:Y1_, X:X1_] * (1 - al) + c_[:Y1_ - Y, :X1_ - X] * al).astype(np.uint8)
+            return
+        H = int(sum(it[3] for it in items)) + 6                             # the glitch copy: drawn upside down
+        im = Image.new("RGB", (192, H), (0, 0, 0))
+        mk = Image.new("L", (192, H), 0)
+        d, dm = ImageDraw.Draw(im), ImageDraw.Draw(mk)
+        yy = 0
+        for text, ff, col, lh in items:
+            d.text((0, yy), text, font=ff, fill=col)
+            dm.text((0, yy), text, font=ff, fill=255)
+            yy += lh
+        if height:
+            sc = min(1.0, height / H)
+            im = im.resize((int(192 * sc), int(H * sc)), Image.LANCZOS)
+            mk = mk.resize(im.size, Image.LANCZOS)
+        im, mk = im.transpose(Image.FLIP_TOP_BOTTOM), mk.transpose(Image.FLIP_TOP_BOTTOM)
+        fr = fr_cur[0]
+        X, Y = int(x + jx), int(top + jy)
+        sub = Image.fromarray(fr[Y:Y + im.height, X:X + im.width])
+        sub.paste(im.crop((0, 0, sub.width, sub.height)), (0, 0), mk.crop((0, 0, sub.width, sub.height)))
+        fr[Y:Y + im.height, X:X + im.width] = np.asarray(sub)
+
+    def erase_text(fr, y0, y1):
+        box = clip_box((1718, y0 - 6, 1920, y1 + 8))
+        sub = fr[box[1]:box[3], box[0]:box[2]]
+        h, s, v = hsv(sub)
+        erase(fr, box, (v > 0.4) & (s < 0.3), grow=2, radius=4)
+    fr_cur = [None]
 
     def tight(fr, box, thr=0.72):
         """crop of the cream text inside box (the first title line of a sidebar video, or a title under the player)"""
@@ -470,81 +691,24 @@ def run(args):
                             for k, tp in main_titles.items()), default=(0, None))
                 if best[0] > 0.55:
                     ui_replace(fr, (54 + dx, 816 + dy, 1000 + dx, 874 + dy), t_main[SWAP[best[1]]])
-            # sidebar videos from the original channel -> the user's songs: thumbnail, title, channel, age
-            tx0, ty0, tx1, ty1 = clip_box((1690, 120, 1920, 1080))        # the page's shake estimate is unreliable here
-            tcol = fr[ty0:ty1, tx0:tx1]
-            cands = []
-            for key, tp in side_titles.items():
-                if tp.shape[0] >= tcol.shape[0] or tp.shape[1] >= tcol.shape[1]:
-                    continue
-                r = cv2.matchTemplate(tcol, tp, cv2.TM_CCOEFF_NORMED)
-                for _ in range(3):
-                    _, mx, _, loc = cv2.minMaxLoc(r)
-                    if mx < 0.5:
-                        break
-                    cands.append((mx, key, loc))
-                    r[max(0, loc[1] - 30):loc[1] + 30, :] = -1
-            taken = []
-            for mx, key, loc in sorted(cands, reverse=True):
-                if any(abs(loc[1] - y) < 60 for y in taken):
-                    continue
-                taken.append(loc[1])
-                song = SWAP[key]
-                lx, ly = tx0 + loc[0], ty0 + loc[1]                  # top-left of the first title line
-                n = LINES[key]
-                box = clip_box((lx - 14, ly - 8, 1920, ly + (n + 1) * 28 + 26))
-                sub = fr[box[1]:box[3], box[0]:box[2]]
-                erase(fr, box, m_light(sub, 0.4), grow=2, radius=4)
-                f = fnt(song, 21)
-                lines = wrap(SONGS[song], f, 182)
-                while len(lines) > 3:
-                    f = fnt(song, f.size - 1)
-                    lines = wrap(SONGS[song], f, 182)
-                items = [(l, f, CREAM, 28) for l in lines] + [(CHANNEL, f_side_ch, UI_GREY, 28), (AGE[key], f_side_ch, UI_GREY, 28)]
-                draw_lines(fr, lx, ly - 3, items)
-                # thumbnail: the light box left of the title, inside its hand-drawn border
-                bx0, by0, bx1, by1 = clip_box((lx - 378, ly - 50, lx - 10, ly + 245))
-                vband = hsv(fr[by0:by1, bx0:bx1])[2]
-                rows = vband.mean(1) > 0.2
-                yc = min(len(rows) - 1, max(0, ly + 80 - by0))
-                X0, Y0, X1, Y1 = lx - 362, ly - 24, lx - 16, ly + 200                 # typical box, if detection fails
-                if rows[yc]:
-                    a = yc
-                    while a > 0 and rows[a - 1]:
-                        a -= 1
-                    b = yc
-                    while b < len(rows) - 1 and rows[b + 1]:
-                        b += 1
-                    xs = np.nonzero(vband[a:b + 1].mean(0) > 0.2)[0]
-                    if len(xs) and 150 < b - a < 260 and 260 < xs.max() - xs.min() < 360:
-                        X0, Y0, X1, Y1 = bx0 + xs.min() + 7, by0 + a + 7, bx0 + xs.max() - 7, by0 + b - 7
-                X0, Y0, X1, Y1 = clip_box((X0, Y0, X1, Y1))
-                if X1 - X0 > 50 and Y1 - Y0 > 50:
-                    fr[Y0:Y1, X0:X1] = np.asarray(thumbs[song].resize((X1 - X0, Y1 - Y0), Image.LANCZOS))
-                    cv2.rectangle(fr, (X0, Y0), (X1 - 1, Y1 - 1), (20, 16, 14), 2)
-            # sidebar: the channel line under each video, and our song's entry
-            sx0, sy0, sx1, sy1 = clip_box((1690, 120, 1920, 1080))
-            col = fr[sy0:sy1, sx0:sx1]
-            r = cv2.matchTemplate(col, side_tpl, cv2.TM_CCOEFF_NORMED)
-            th, tw = side_tpl.shape[:2]
-            for _ in range(8):
-                _, mx, _, loc = cv2.minMaxLoc(r)
-                if mx < 0.38:
-                    break
-                # block this line and the grey "... ago" line under it
-                r[max(0, loc[1] - th):loc[1] + 40, max(0, loc[0] - tw):loc[0] + tw] = -1
-                x, y = sx0 + loc[0], sy0 + loc[1]
-                patch = fr[y:y + th, x:x + tw]
-                v = hsv(patch)[2]
-                bright = v[v > 0.4]
-                if len(bright) < 20 or not (0.45 < np.median(bright) < 0.78):   # channel lines are grey, titles cream
-                    continue
-                ui_replace(fr, (x - 3, y - 3, x + tw + 8, y + th + 3), t_side, 0.45)
-            r = cv2.matchTemplate(col, harl_tpl, cv2.TM_CCOEFF_NORMED)
-            _, mx, _, loc = cv2.minMaxLoc(r)
-            if mx > 0.40:                                         # third line of "Harlequin / Contraption ft / Kasane Teto"
-                x, y = sx0 + loc[0], sy0 + loc[1] + harl_tpl.shape[0] - 20
-                ui_replace(fr, (x - 3, y - 2, x + 150, y + 21), t_side_title, 0.5)
+            # the sidebar: every frame, each slot's video by the layout on screen, positions found in the frame itself
+            fr_cur[0] = fr
+            phase = int(t * 15)                                       # the drawings boil on twos
+            if t < 27.9:
+                lay, ldy = which_layout(fr, t)
+                if lay:
+                    tb = slots(side_text_blocks(fr), layout_geom[lay][0], ldy)
+                    th = slots(side_thumbs(fr), layout_geom[lay][1], ldy)
+                    erase_text(fr, 186, 1072)                          # every original title in the column, wherever it is
+                    for key, (y0, y1), (u0, u1) in zip(LAYOUTS[lay][1], tb, th):
+                        song, age = ENTRY[key]
+                        entry_text(key, song, age, 1736, y0, phase)
+                        if key != "harl":
+                            put_thumb(fr, u0, u1, thumb_art[song], phase)
+            else:                                                    # the upside-down glitch copy of the sidebar
+                for (song, age), (y0, y1) in zip(FLIPPED, side_text_blocks(fr)[:3]):
+                    erase_text(fr, y0, y1)
+                    entry_text(song, song, age, 1734, y0, phase, flip=True, height=y1 - y0 + 4)
 
     if args.stills:
         outdir = os.path.dirname(os.path.abspath(args.out))
