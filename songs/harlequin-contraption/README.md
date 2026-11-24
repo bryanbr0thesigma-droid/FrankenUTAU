@@ -35,7 +35,17 @@ Vane Lily's MV (animation by nezzu) with these changes:
   | Collared, FIRE!!! | Signaling Remix (feat. Adachi Rei & Corrupt-Chan) |
 
   The thumbnails come from the Welcome To The Internet MV (pixel Teto), the Signaling reanimation (Corrupt-Chan) and a
-  placeholder title card for LEMONADE.
+  placeholder title card for LEMONADE. The ages are real: LEMONADE "1 month ago", the other two "Unreleased".
+
+  **The player plays them too.** The big player shows the song named under it:
+
+  * LEMONADE is an animated title card: lemon slices turn and bubbles rise.
+  * Welcome To The Internet plays pixel Teto from its MV (3:54).
+  * The Signaling Remix plays Corrupt-Chan dancing from the reanimation (0:52).
+
+  The clips get Maki's palette and the cartoon look, play on twos and sit inside a rough hand-drawn frame. What the MV
+  draws over the video stays on top: the "DO YOU HEAR ME?" and "DON'T ACT LIKE YOU DON'T SEE ME" bubbles, the lyric
+  lines, and the white loading screen at 0:17.
 
   How the sidebar is replaced, in every frame of 0:16-0:28:
 
@@ -50,7 +60,10 @@ Vane Lily's MV (animation by nezzu) with these changes:
   * **Overlays.** Orange drawn over the page stays on top: the light rays at 0:17 and the flying lyric letters.
   * **Glitch copy.** The upside-down copy of the sidebar from 0:28 gets the same titles, flipped.
 * **No pentagrams.** The pentagram under Teto at 2:54 and the one on the stage floor at 3:22 are erased. Their thin gold
-  strokes are found by color and shape, so candles, flames and faces stay.
+  strokes are found by color and shape, so candles, flames and faces stay. A third one flashes in a glitch at 2:41.8
+  (about nine frames, a glowing pentagram around Teto's face). Those frames show the clean "keep dancin' Harlequin
+  contraption" frame from between its flashes instead. It was found by scanning every frame for one-frame flashes and
+  thin gold line work.
 * **Cleaner erasing.** Inpainted areas get the paper grain back, so they don't show as smooth patches. The new credit
   and sign text is sized to cover the old.
 * **The credit reads "vocal Tsurumaki Maki".** The closing STARRING sign reads "TSURUMAKI / MAKI". The sign's cross
@@ -61,8 +74,9 @@ Vane Lily's MV (animation by nezzu) with these changes:
 * **The audio is the Maki cover**, delayed 70 ms to the MV's timing (measured against the instrumental, constant over
   the song).
 
-`tools/mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --out out.mp4` does
-it all. `--stills 18,83.5` gives check frames. Fonts: Luckiest Guy, Chewy, Pirata One and M PLUS Rounded 1c
+`tools/mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --thumbs DIR
+--clips DIR --out out.mp4` does it all. `--thumbs` holds wtti.png, signaling.png and lemonade.png, and `--clips` holds
+wtti.mp4 and signaling.mp4 (the two MVs). `--stills 18,83.5` gives check frames. Fonts: Luckiest Guy, Chewy, Pirata One and M PLUS Rounded 1c
 (fontsource, converted to TTF).
 
 ## Lyric video

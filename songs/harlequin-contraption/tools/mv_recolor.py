@@ -1,6 +1,6 @@
 """The original Harlequin Contraption MV, edited for the Tsurumaki Maki cover.
 
-    python -I mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --thumbs DIR --out out.mp4
+    python -I mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --thumbs DIR --clips DIR --out out.mp4
         [--stills 18,83.5,...]   PNG stills instead of the video (into the folder of --out)
         [--range 80 86]          only that stretch (preview)
 
@@ -343,6 +343,105 @@ def put_thumb(fr, y0, y1, img, phase):
     fr[Y0:Y1, X0:X1] = canvas
 
 
+
+# ---------------------------------------------------------------- the player
+def lemonade_card(w, h, phase, jp_font):
+    """an animated title card for LEMONADE (no video of it here): lemon slices turning, bubbles rising"""
+    y = np.linspace(0, 1, h)[:, None, None]
+    im = Image.fromarray((np.array([255, 226, 96]) * (1 - y) + np.array([246, 170, 36]) * y).repeat(w, 1).astype(np.uint8))
+    d = ImageDraw.Draw(im)
+    ink = (60, 36, 10)
+    rng = np.random.default_rng(7)
+    for k in range(18):                                                   # bubbles
+        bx = rng.uniform(0, w)
+        by = (rng.uniform(0, h) - phase * rng.uniform(4, 9)) % (h + 60) - 30
+        r = rng.uniform(6, 18)
+        d.ellipse((bx - r, by - r, bx + r, by + r), outline=(255, 250, 225), width=3)
+    for cx, cy, r, sp in ((0.82, 0.68, 0.36, 2.0), (0.14, 0.2, 0.22, -3.0), (0.1, 0.9, 0.16, 4.0)):
+        cx, cy, r = cx * w, cy * h, r * h
+        a0 = np.radians(phase * sp)
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(255, 246, 186), outline=ink, width=5)
+        d.ellipse((cx - r * 0.86, cy - r * 0.86, cx + r * 0.86, cy + r * 0.86), outline=(242, 196, 50), width=7)
+        for j in range(8):
+            a = a0 + j * np.pi / 4
+            d.line((cx, cy, cx + np.cos(a) * r * 0.8, cy + np.sin(a) * r * 0.8), fill=(240, 200, 60), width=6)
+    f = ImageFont.truetype(jp_font, int(h * 0.26))
+    bob = 6 * np.sin(phase * 0.4)
+    d.text((w / 2, h / 2 + bob), "レモネード", font=f, anchor="mm", fill=(255, 255, 255), stroke_width=12, stroke_fill=ink)
+    return np.asarray(im)
+
+
+def cartoon_fast(img):
+    """cartoon() at half size, back up: same look, a quarter of the work"""
+    h, w = img.shape[:2]
+    return cv2.resize(cartoon(cv2.resize(img, (w // 2, h // 2), interpolation=cv2.INTER_AREA)), (w, h),
+                      interpolation=cv2.INTER_LINEAR)
+
+
+def player_overlays(sub, bubbles):
+    """what the MV draws over the video in the player: the lyric's speech bubbles and its lyric lines"""
+    h, s, v = hsv(sub)
+    keep = np.zeros(sub.shape[:2], bool)
+    if bubbles:
+        cream = ((v > 0.85) & (s < 0.25)).astype(np.uint8)
+        n, lab, st, _ = cv2.connectedComponentsWithStats(cream)
+        for i in range(1, n):
+            if st[i, cv2.CC_STAT_AREA] < 4000:
+                continue
+            cnts, _ = cv2.findContours((lab == i).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            filled = np.zeros(cream.shape, np.uint8)
+            cv2.drawContours(filled, cnts, -1, 1, -1)
+            if ((filled > 0) & (lab != i) & (v < 0.35)).sum() > 300:           # a bubble has writing in it
+                keep |= filled > 0
+        keep = near(keep, 5)
+    col = ((h > 12) & (h < 62) & (s > 0.5) & (v > 0.55)).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(col)
+    H, W, A = st[:, cv2.CC_STAT_HEIGHT], st[:, cv2.CC_STAT_WIDTH], st[:, cv2.CC_STAT_AREA]
+    cand = np.nonzero((H >= 12) & (H <= 90) & (W <= 140) & (A >= 30) & (A <= 6000))[0]
+    cand = cand[cand > 0]
+    cy = st[cand, cv2.CC_STAT_TOP] + H[cand] / 2
+    line = [c for c, y in zip(cand, cy) if (np.abs(cy - y) < 30).sum() >= 5]   # letters sit in a row
+    if line:
+        sure = np.isin(lab, line)
+        ys = np.nonzero(sure.any(1))[0]
+        band = np.zeros(col.shape, bool)
+        band[max(0, ys.min() - 8):ys.max() + 9] = True
+        # letters that touch the art's own orange merge with it: keep the line's orange near the sure letters
+        keep |= near(sure | (col.astype(bool) & band & near(sure, 40)), 4)
+    return keep
+
+
+def put_player(fr, box, img, phase, keep_fn):
+    """the video in the player: img inside a rough hand-drawn rectangle, the MV's overlays left on top"""
+    x0, y0, x1, y1 = box
+    M = 12
+    X0, Y0, X1, Y1 = clip_box((x0 - M, y0 - M, x1 + M, y1 + M))
+    sub = fr[Y0:Y1, X0:X1]
+    keep = keep_fn(sub)
+    H, W = sub.shape[:2]
+    rng = np.random.default_rng(5000 + phase)
+    edge = lambda n: cv2.resize(rng.normal(0, 2.0, (1, max(3, n // 45))).astype(np.float32), (n, 1),
+                                interpolation=cv2.INTER_CUBIC)[0]
+    yy, xx = np.mgrid[0:H, 0:W]
+    rect = ((yy >= (y0 - Y0) + edge(W)[None, :]) & (yy < (y1 - Y0) + edge(W)[None, :]) &
+            (xx >= (x0 - X0) + edge(H)[:, None]) & (xx < (x1 - X0) + edge(H)[:, None]))
+    ih, iw = img.shape[:2]                                                # fill the box, cropping the overflow
+    sc = max((x1 - x0) / iw, (y1 - y0) / ih)
+    big = cv2.resize(img, (int(np.ceil(iw * sc)), int(np.ceil(ih * sc))), interpolation=cv2.INTER_AREA)
+    oy, ox = (big.shape[0] - (y1 - y0)) // 2, (big.shape[1] - (x1 - x0)) // 2
+    pic = boil(big[oy:oy + y1 - y0, ox:ox + x1 - x0], phase)
+    pic = np.clip(pic.astype(np.float32) + rng.normal(0, 3.5, pic.shape[:2])[..., None], 0, 255).astype(np.uint8)
+    canvas = sub.copy()
+    bg = np.array([26, 22, 20], np.float32)
+    canvas[~rect] = np.clip(bg + rng.normal(0, 3.0, ((~rect).sum(), 1)), 0, 255).astype(np.uint8)
+    full = np.zeros_like(sub)
+    full[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0] = pic
+    canvas[rect] = full[rect]
+    ink = rect & ~cv2.erode(rect.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))).astype(bool)
+    canvas[ink] = (20, 16, 14)
+    canvas[keep] = sub[keep]
+    fr[Y0:Y1, X0:X1] = canvas
+
 # ---------------------------------------------------------------- frames
 def frames(mv, lut, t0, t1):
     t0 = round(t0 * FPS) / FPS                       # stay on the frame grid, so frame numbers never collide
@@ -496,8 +595,30 @@ def run(args):
     LAYOUTS = {"A": (16.5, ["lose", "lovebug", "fire"]), "B": (18.0, ["harl", "laugh", "collared"]),
                "C": (25.2, ["harl", "collared", "lovebug"]), "D": (26.5, ["harl", "lovebug", "laugh"]),
                "E": (27.5, ["harl", "lovebug", "laugh"])}
-    ENTRY = {"harl": ("harl", "1 day ago")} | {k: (SWAP[k], AGE[k]) for k in SWAP}
-    FLIPPED = [("wtti", "3 months ago"), ("signaling", "11 months ago"), ("lemonade", "2 months ago")]
+    RELEASED = {"lemonade": "1 month ago", "wtti": "Unreleased", "signaling": "Unreleased"}
+    ENTRY = {"harl": ("harl", "1 day ago")} | {k: (SWAP[k], RELEASED[SWAP[k]]) for k in SWAP}
+    FLIPPED = [(k, RELEASED[k]) for k in ("wtti", "signaling", "lemonade")]
+    # the player plays the user's songs: clips from their own MVs, LEMONADE as an animated card
+    # source times chosen so the glitchy stretch (0:24.6-0:27.9) lands on pixel Teto (WTTI 3:54) and Corrupt-Chan
+    # dancing (Signaling 0:52); the player shows source time base + (t - 16.95)
+    CLIP = {"wtti": (os.path.join(args.clips, "wtti.mp4"), 225.85), "signaling": (os.path.join(args.clips, "signaling.mp4"), 43.85)}
+    PBOX = (46, 132, 1243, 790)
+    clip_cache = {}
+
+    def player_img(song, t):
+        idx = int(t * 15)                                                  # on twos, like the drawings
+        if (song, idx) not in clip_cache:
+            if song == "lemonade":
+                img = lemonade_card(PBOX[2] - PBOX[0], PBOX[3] - PBOX[1], idx, JP)
+            else:
+                path, base = CLIP[song]
+                raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{base + idx / 15 - 16.95:.3f}", "-i", path,
+                                      "-frames:v", "1", "-vf", f"scale=1280:720,lut3d={args.lut}", "-f", "rawvideo",
+                                      "-pix_fmt", "rgb24", "-"], capture_output=True, check=True).stdout
+                img = cartoon_fast(np.frombuffer(raw, np.uint8).reshape(720, 1280, 3).copy())
+            clip_cache[(song, idx)] = img
+        return clip_cache[(song, idx)]
+    playing = {"key": None}
     f_title = {k: fnt(k, 21) for k in SONGS}
     f_title["harl"] = ImageFont.truetype(font["m-plus-rounded-1c"], 21)
     TITLE_OF = dict(SONGS) | {"harl": NEW_TITLE}
@@ -604,6 +725,12 @@ def run(args):
         h, s, v = hsv(sub)
         erase(fr, box, (v > 0.4) & (s < 0.3), grow=2, radius=4)
     fr_cur = [None]
+    plate = []
+
+    def flash_plate():
+        if not plate:
+            plate.append(next(frames(args.mv, args.lut, 161.70, 161.70 + 1 / FPS))[1])
+        return plate[0]
 
     def tight(fr, box, thr=0.72):
         """crop of the cream text inside box (the first title line of a sidebar video, or a title under the player)"""
@@ -644,6 +771,8 @@ def run(args):
         for L in lyrics:
             if L.t0 <= t < L.t1:
                 L.apply(t, fr)
+        if 161.75 <= t < 162.05:                                 # a pentagram flashing in a glitch: hold the clean
+            fr[:] = flash_plate()                                  # "keep dancin'" frame between its flashes instead
         if 173.55 <= t < 175.35:                                 # pentagram under Teto ("encore's end"): its thin lines
             box = (250, 200, 1880, 1060)
             sub = fr[box[1]:box[3], box[0]:box[2]]
@@ -690,7 +819,15 @@ def run(args):
                 best = max(((cv2.minMaxLoc(cv2.matchTemplate(win, tp, cv2.TM_CCOEFF_NORMED))[1], k)
                             for k, tp in main_titles.items()), default=(0, None))
                 if best[0] > 0.55:
+                    playing["key"] = best[1]
                     ui_replace(fr, (54 + dx, 816 + dy, 1000 + dx, 874 + dy), t_main[SWAP[best[1]]])
+                key = playing["key"]
+                pv = hsv(fr[150:770, 70:1220])
+                loading = ((pv[2] > 0.85) & (pv[1] < 0.25)).mean() > 0.55          # the white "loading" screen stays
+                if key and not loading:
+                    put_player(fr, (PBOX[0] + dx, PBOX[1] + dy, PBOX[2] + dx, PBOX[3] + dy),
+                               player_img(SWAP[key], t), int(t * 15),
+                               lambda sub, k=key: player_overlays(sub, bubbles=(k == "lovebug")))
             # the sidebar: every frame, each slot's video by the layout on screen, positions found in the frame itself
             fr_cur[0] = fr
             phase = int(t * 15)                                       # the drawings boil on twos
@@ -737,7 +874,7 @@ def run(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    for k in ("mv", "lut", "audio", "avatar", "fonts", "thumbs", "out"):
+    for k in ("mv", "lut", "audio", "avatar", "fonts", "thumbs", "clips", "out"):
         ap.add_argument("--" + k, required=True)
     ap.add_argument("--stills")
     ap.add_argument("--range", nargs=2, type=float)
