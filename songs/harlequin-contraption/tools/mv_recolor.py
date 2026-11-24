@@ -1,6 +1,6 @@
 """The original Harlequin Contraption MV, edited for the Tsurumaki Maki cover.
 
-    python -I mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --out out.mp4
+    python -I mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --thumbs DIR --out out.mp4
         [--stills 18,83.5,...]   PNG stills instead of the video (into the folder of --out)
         [--range 80 86]          only that stretch (preview)
 
@@ -66,13 +66,66 @@ def near(mask, px):
     return cv2.dilate(mask.astype(np.uint8), k) > 0
 
 
-def erase(frame, box, mask, grow=2, radius=5):
-    """inpaint mask (box-local) inside frame[box]"""
+def erase(frame, box, mask, grow=2, radius=5, grain=True):
+    """inpaint mask (box-local) inside frame[box]; add back the paper grain the inpainting smooths away"""
     x0, y0, x1, y1 = box
-    sub = frame[y0:y1, x0:x1]
+    sub = np.ascontiguousarray(frame[y0:y1, x0:x1])
     m = near(mask, grow).astype(np.uint8) * 255
-    if m.any():
-        frame[y0:y1, x0:x1] = cv2.inpaint(np.ascontiguousarray(sub), m, radius, cv2.INPAINT_TELEA)
+    if not m.any():
+        return
+    out = cv2.inpaint(sub, m, radius, cv2.INPAINT_TELEA)
+    if grain:
+        g = cv2.cvtColor(sub, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        hp = g - cv2.GaussianBlur(g, (0, 0), 2)
+        keep = m == 0
+        sigma = float(np.clip(1.4826 * np.median(np.abs(hp[keep])), 0, 9)) if keep.any() else 0.0
+        if sigma > 0.3:
+            noise = cv2.GaussianBlur(np.random.default_rng().normal(0, sigma * 1.3, g.shape).astype(np.float32), (0, 0), 0.7)
+            hole = m > 0
+            o = out.astype(np.float32)
+            o[hole] += noise[hole][:, None]
+            out = np.clip(o, 0, 255).astype(np.uint8)
+    frame[y0:y1, x0:x1] = out
+
+
+def thin_lines(mask, k):
+    """the thin strokes of a mask (blobs wider than k removed), without the rims of those blobs"""
+    ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    blobs = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, ker) > 0
+    return mask & ~blobs & ~near(blobs, 4)
+
+
+def m_goldish(img, s0=0.3, v0=0.35, h0=30, h1=62):
+    h, s, v = hsv(img)
+    return (h > h0) & (h < h1) & (s > s0) & (v > v0)
+
+
+def wrap(text, font, width):
+    words, lines, cur = text.split(" "), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if font.getlength(t) <= width or not cur:
+            cur = t
+        else:
+            lines.append(cur)
+            cur = w
+    return lines + ([cur] if cur else [])
+
+
+def draw_lines(frame, x, y, items):
+    """items: (text, font, colour, line height); draws left-aligned lines from (x, y) downwards"""
+    h = int(sum(it[3] for it in items)) + 8
+    x0, y0 = max(0, int(x) - 2), max(0, int(y) - 4)
+    x1, y1 = WID, min(HEI, y0 + h + 8)
+    if y1 <= y0:
+        return
+    im = Image.fromarray(frame[y0:y1, x0:x1])
+    d = ImageDraw.Draw(im)
+    yy = y - y0
+    for text, font, col, lh in items:
+        d.text((x - x0, yy), text, font=font, fill=col)
+        yy += lh
+    frame[y0:y1, x0:x1] = np.asarray(im)
 
 
 def clip_box(b):
@@ -186,10 +239,10 @@ class Lyric:
     """an animated lyric line: erase the old words (by colour inside a region), draw the new ones in their place"""
 
     def __init__(self, t0, t1, region, core, block, spread=320, settled=None, near_dark=8, grow=3,
-                 angle=0.0, exclude=None, offset=(0, 0)):
+                 angle=0.0, exclude=None, offset=(0, 0), shadow=None):
         self.t0, self.t1, self.region, self.core, self.block = t0, t1, region, core, block
         self.spread, self.settled, self.near_dark, self.grow = spread, settled, near_dark, grow
-        self.angle, self.exclude, self.offset = angle, exclude, offset
+        self.angle, self.exclude, self.offset, self.shadow = angle, exclude, offset, shadow
         self.stats = {}
 
     def mask(self, frame, t):
@@ -200,6 +253,8 @@ class Lyric:
             yy, xx = np.mgrid[box[1]:box[3], box[0]:box[2]]
             core &= ~self.exclude(t, xx, yy)
         full = core | (m_dark(sub) & near(core, self.near_dark))
+        if self.shadow is not None:                      # coloured shadows of the old letters (brown/red), near them
+            full |= self.shadow(sub) & near(core, self.near_dark + 6)
         return box, core, full
 
     def measure(self, t, frame):
@@ -266,14 +321,14 @@ def run(args):
     t_side_title = ui("Tsurumaki Maki", 18, max_w=150)
     t_title = ui(NEW_TITLE, 34, max_w=700)
     t_title_fs = ui(NEW_TITLE, 44, max_w=1150)
-    t_credit = TextBlock(["Tsurumaki Maki"], font["pirata-one"], 128, CREAM, (16, 12, 12), 7, GOLD, (7, 9), rot=0.05, wobble=0.04, seed=4)
-    t_credit_small = TextBlock(["Tsurumaki Maki"], font["pirata-one"], 66, CREAM, (16, 12, 12), 4, GOLD, (3, 4), rot=0.05, wobble=0.04, seed=4)
+    t_credit = TextBlock(["Tsurumaki Maki"], font["pirata-one"], 148, CREAM, (16, 12, 12), 7, GOLD, (7, 9), rot=0.05, wobble=0.04, seed=4)
+    t_credit_small = TextBlock(["Tsurumaki Maki"], font["pirata-one"], 76, CREAM, (16, 12, 12), 4, GOLD, (3, 4), rot=0.05, wobble=0.04, seed=4)
 
     lyrics = [
         Lyric(82.40, 84.62, lambda t: (480, 330, 1440, 960), m_gold,
               TextBlock(["INVITE THIS CROWD", "TO DANCE TONIGHT"], font["luckiest-guy"], 92, GOLD, None, 0, DARK, (5, 6),
                         line_gap=1.05, wobble=0.05, rot=0.09, arc=0.25, seed=11),
-              spread=300, settled=(83.2, 84.2)),
+              spread=300, settled=(83.2, 84.2), near_dark=8, shadow=lambda s: m_goldish(s, 0.3, 0.12, -1, 40)),
         Lyric(177.40, 180.95, lambda t: (190, 150, 1160, 580), lambda s: m_cream(s) | m_gold(s),
               TextBlock(["Free thy body and", "thy mind"], font["chewy"], 100, CREAM, GOLD, 4,
                         line_gap=1.0, wobble=0.06, rot=0.1, seed=12),
@@ -289,10 +344,24 @@ def run(args):
         # From 3:25 Maki leans in from the right: keep off her hair.
         Lyric(203.55, 206.95, lambda t: (380, 380, 1030, 700) if t < 205.0 else (380, 400, 1015, 770),
               lambda s: m_dark(s, 0.3),
-              TextBlock(["TSURUMAKI", "MAKI"], font["luckiest-guy"], 82, (46, 42, 40), line_gap=0.92, rot=0.05, wobble=0.03, seed=6),
+              TextBlock(["TSURUMAKI", "MAKI"], font["luckiest-guy"], 100, (46, 42, 40), line_gap=0.92, rot=0.05, wobble=0.03, seed=6),
               spread=0, settled=(203.8, 204.8), near_dark=0, grow=3, angle=-13,
               exclude=lambda t, xx, yy: (xx > 905 + (yy - 400) * 0.45) if t >= 205.0 else np.zeros(xx.shape, bool)),
     ]
+    # the user's own songs in place of the original channel's videos (sidebar and the titles under the player)
+    JP = "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf"
+    SONGS = {"wtti": "Welcome To The Internet (Feat. Kasane Teto)", "lemonade": "レモネード",
+             "signaling": "Signaling Remix (feat. Adachi Rei & Corrupt-Chan)"}
+    SWAP = {"lose": "wtti", "lovebug": "lemonade", "fire": "signaling", "laugh": "wtti", "collared": "signaling"}
+    LINES = {"lose": 3, "lovebug": 3, "fire": 5, "laugh": 3, "collared": 2}      # title lines + extra channel lines
+    AGE = {"lose": "11 months ago", "lovebug": "2 months ago", "fire": "10 months ago", "laugh": "3 months ago",
+           "collared": "11 months ago"}
+    thumbs = {k: Image.open(os.path.join(args.thumbs, f"{k}.png")).convert("RGB") for k in SONGS}
+    fnt = lambda k, size: ImageFont.truetype(JP if k == "lemonade" else font["m-plus-rounded-1c"], size)
+    f_side_ch = ImageFont.truetype(font["m-plus-rounded-1c"], 18)
+    t_main = {k: TextBlock([v], JP if k == "lemonade" else font["m-plus-rounded-1c"], 34, CREAM, max_w=880, align="left")
+              for k, v in SONGS.items()}
+
     if args.stills:
         times = [float(x) for x in args.stills.split(",")]
         t_lo, t_hi = min(times) - 0.5, max(times) + 0.5
@@ -313,6 +382,22 @@ def run(args):
     name_tpl = ref[890:938, 128:305].copy()                          # "Vane Lily" under the player
     side_tpl = ref[309:331, 1735:1843].copy()                        # "Vane Lily" under a sidebar video
     harl_tpl = ref[222:302, 1735:1880].copy()                        # "Harlequin / Contraption ft / Kasane Teto"
+    chip_tpl = ref[134:170, 1378:1595].copy()                        # "From Vane Lily"
+
+    def tight(fr, box, thr=0.72):
+        """crop of the cream text inside box (the first title line of a sidebar video, or a title under the player)"""
+        x0, y0, x1, y1 = box
+        m = hsv(fr[y0:y1, x0:x1])[2] > thr
+        ys, xs = np.nonzero(m)
+        return fr[y0 + ys.min() - 2:y0 + ys.max() + 3, x0 + xs.min() - 2:x0 + xs.max() + 3].copy()
+    r165 = next(frames(args.mv, args.lut, 16.5, 16.5 + 1 / FPS))[1]
+    r252 = next(frames(args.mv, args.lut, 25.2, 25.2 + 1 / FPS))[1]
+    r265 = next(frames(args.mv, args.lut, 26.5, 26.5 + 1 / FPS))[1]
+    side_titles = {"lose": tight(r165, (1730, 216, 1856, 252)), "lovebug": tight(r165, (1730, 486, 1840, 522)),
+                   "fire": tight(r165, (1730, 772, 1910, 808)), "laugh": tight(ref, (1724, 497, 1896, 532)),
+                   "collared": tight(ref, (1728, 772, 1860, 808))}
+    main_titles = {"lovebug": tight(ref, (54, 818, 1000, 874)), "laugh": tight(r252, (54, 818, 1000, 874)),
+                   "collared": tight(r265, (54, 818, 1000, 874))}
     last_off = [0, 0]
 
     def page_offset(fr):
@@ -338,6 +423,16 @@ def run(args):
         for L in lyrics:
             if L.t0 <= t < L.t1:
                 L.apply(t, fr)
+        if 173.55 <= t < 175.35:                                 # pentagram under Teto ("encore's end"): its thin lines
+            box = (250, 200, 1880, 1060)
+            sub = fr[box[1]:box[3], box[0]:box[2]]
+            m = thin_lines(m_goldish(sub), 31) & ~near(m_cream(sub), 8)
+            erase(fr, box, m, grow=6, radius=6)
+        if 201.58 <= t < 203.58:                                 # pentagram on the stage floor (candles stay)
+            box = (0, 380, 1920, 1080)
+            sub = fr[box[1]:box[3], box[0]:box[2]]
+            m = m_goldish(sub, 0.18, 0.28, 24, 68) & ~near(m_cream(sub), 6)     # lines and their soft gold smears
+            erase(fr, box, m, grow=6, radius=6)
         if 14.70 <= t < 16.0:                                    # full-screen player title
             ui_replace(fr, (60, 22, 1200, 112), t_title_fs, 0.6)
         if PAGE_T[0] <= t < PAGE_T[1]:
@@ -351,7 +446,13 @@ def run(args):
             fr_av.alpha_composite(avatar, (2, 2))
             fr[cy - 40:cy + 40, cx - 40:cx + 40] = np.asarray(fr_av.convert("RGB"))
             ui_replace(fr, (124 + dx, 886 + dy, 312 + dx, 942 + dy), t_name)
-            ui_replace(fr, (1380 + dx, 131 + dy, 1600 + dx, 172 + dy), t_chip, 0.5)
+            cw = fr[100:210, 1300:1760]
+            _, cmx, _, cl = cv2.minMaxLoc(cv2.matchTemplate(cw, chip_tpl, cv2.TM_CCOEFF_NORMED))
+            if cmx > 0.4:                                         # the chip moves on its own in the glitches
+                cx0, cy0 = 1300 + cl[0], 100 + cl[1]
+                ui_replace(fr, (cx0 - 8, cy0 - 6, cx0 + chip_tpl.shape[1] + 90, cy0 + chip_tpl.shape[0] + 6), t_chip, 0.5)
+            else:
+                ui_replace(fr, (1352 + dx, 128 + dy, 1700 + dx, 176 + dy), t_chip, 0.5)
             if t < 16.95:                                         # the page's title for this video
                 ui_replace(fr, (54 + dx, 818 + dy, 742 + dx, 874 + dy), t_title)
             if 27.9 <= t:                                         # its upside-down glitch copy
@@ -362,8 +463,67 @@ def run(args):
                 core = m_credit(sub)
                 erase(fr, box, core | (m_dark(sub) & near(core, 6)), grow=2)
                 paste(fr, t_credit_small.layer(spread=0), ((box[0] + box[2]) / 2 + 6, (box[1] + box[3]) / 2 + 2))
+            if 16.95 <= t < 27.9:                                 # the title of the video playing: the user's song
+                wx0, wy0, wx1, wy1 = clip_box((40 + dx, 805 + dy, 1040 + dx, 885 + dy))
+                win = fr[wy0:wy1, wx0:wx1]
+                best = max(((cv2.minMaxLoc(cv2.matchTemplate(win, tp, cv2.TM_CCOEFF_NORMED))[1], k)
+                            for k, tp in main_titles.items()), default=(0, None))
+                if best[0] > 0.55:
+                    ui_replace(fr, (54 + dx, 816 + dy, 1000 + dx, 874 + dy), t_main[SWAP[best[1]]])
+            # sidebar videos from the original channel -> the user's songs: thumbnail, title, channel, age
+            tx0, ty0, tx1, ty1 = clip_box((1690, 120, 1920, 1080))        # the page's shake estimate is unreliable here
+            tcol = fr[ty0:ty1, tx0:tx1]
+            cands = []
+            for key, tp in side_titles.items():
+                if tp.shape[0] >= tcol.shape[0] or tp.shape[1] >= tcol.shape[1]:
+                    continue
+                r = cv2.matchTemplate(tcol, tp, cv2.TM_CCOEFF_NORMED)
+                for _ in range(3):
+                    _, mx, _, loc = cv2.minMaxLoc(r)
+                    if mx < 0.5:
+                        break
+                    cands.append((mx, key, loc))
+                    r[max(0, loc[1] - 30):loc[1] + 30, :] = -1
+            taken = []
+            for mx, key, loc in sorted(cands, reverse=True):
+                if any(abs(loc[1] - y) < 60 for y in taken):
+                    continue
+                taken.append(loc[1])
+                song = SWAP[key]
+                lx, ly = tx0 + loc[0], ty0 + loc[1]                  # top-left of the first title line
+                n = LINES[key]
+                box = clip_box((lx - 14, ly - 8, 1920, ly + (n + 1) * 28 + 26))
+                sub = fr[box[1]:box[3], box[0]:box[2]]
+                erase(fr, box, m_light(sub, 0.4), grow=2, radius=4)
+                f = fnt(song, 21)
+                lines = wrap(SONGS[song], f, 182)
+                while len(lines) > 3:
+                    f = fnt(song, f.size - 1)
+                    lines = wrap(SONGS[song], f, 182)
+                items = [(l, f, CREAM, 28) for l in lines] + [(CHANNEL, f_side_ch, UI_GREY, 28), (AGE[key], f_side_ch, UI_GREY, 28)]
+                draw_lines(fr, lx, ly - 3, items)
+                # thumbnail: the light box left of the title, inside its hand-drawn border
+                bx0, by0, bx1, by1 = clip_box((lx - 378, ly - 50, lx - 10, ly + 245))
+                vband = hsv(fr[by0:by1, bx0:bx1])[2]
+                rows = vband.mean(1) > 0.2
+                yc = min(len(rows) - 1, max(0, ly + 80 - by0))
+                X0, Y0, X1, Y1 = lx - 362, ly - 24, lx - 16, ly + 200                 # typical box, if detection fails
+                if rows[yc]:
+                    a = yc
+                    while a > 0 and rows[a - 1]:
+                        a -= 1
+                    b = yc
+                    while b < len(rows) - 1 and rows[b + 1]:
+                        b += 1
+                    xs = np.nonzero(vband[a:b + 1].mean(0) > 0.2)[0]
+                    if len(xs) and 150 < b - a < 260 and 260 < xs.max() - xs.min() < 360:
+                        X0, Y0, X1, Y1 = bx0 + xs.min() + 7, by0 + a + 7, bx0 + xs.max() - 7, by0 + b - 7
+                X0, Y0, X1, Y1 = clip_box((X0, Y0, X1, Y1))
+                if X1 - X0 > 50 and Y1 - Y0 > 50:
+                    fr[Y0:Y1, X0:X1] = np.asarray(thumbs[song].resize((X1 - X0, Y1 - Y0), Image.LANCZOS))
+                    cv2.rectangle(fr, (X0, Y0), (X1 - 1, Y1 - 1), (20, 16, 14), 2)
             # sidebar: the channel line under each video, and our song's entry
-            sx0, sy0, sx1, sy1 = clip_box((1700 + dx, 150 + dy, 1920, 1080))
+            sx0, sy0, sx1, sy1 = clip_box((1690, 120, 1920, 1080))
             col = fr[sy0:sy1, sx0:sx1]
             r = cv2.matchTemplate(col, side_tpl, cv2.TM_CCOEFF_NORMED)
             th, tw = side_tpl.shape[:2]
@@ -413,7 +573,7 @@ def run(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    for k in ("mv", "lut", "audio", "avatar", "fonts", "out"):
+    for k in ("mv", "lut", "audio", "avatar", "fonts", "thumbs", "out"):
         ap.add_argument("--" + k, required=True)
     ap.add_argument("--stills")
     ap.add_argument("--range", nargs=2, type=float)

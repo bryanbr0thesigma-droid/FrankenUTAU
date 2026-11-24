@@ -25,6 +25,22 @@ Vane Lily's MV (animation by nezzu) with these changes:
   "From bryanbr0music" chip and the channel line under each sidebar video all change. The video's title becomes
   "Harlequin Contraption ft. Tsurumaki Maki", in the player, on the page, in its upside-down glitch copy and in the
   sidebar entry.
+* **The other videos are bryanbr0music's own songs.** The original channel's videos in the sidebar and the titles under
+  the player are replaced, with new thumbnails:
+
+  | Original | Now |
+  | --- | --- |
+  | Lovebug Venom | レモネード (LEMONADE) |
+  | LAUGHTRACK, Lose Your Head | Welcome To The Internet (Feat. Kasane Teto) |
+  | Collared, FIRE!!! | Signaling Remix (feat. Adachi Rei & Corrupt-Chan) |
+
+  The thumbnails come from the Welcome To The Internet MV (pixel Teto), the Signaling reanimation (Corrupt-Chan) and a
+  placeholder title card for LEMONADE. Each entry is found by its title text, which stays still while the thumbnails
+  animate. Its thumbnail is replaced inside the hand-drawn border, and its text is rewritten (title, channel, age).
+* **No pentagrams.** The pentagram under Teto at 2:54 and the one on the stage floor at 3:22 are erased. Their thin gold
+  strokes are found by color and shape, so candles, flames and faces stay.
+* **Cleaner erasing.** Inpainted areas get the paper grain back, so they don't show as smooth patches. The new credit
+  and sign text is sized to cover the old.
 * **The credit reads "vocal Tsurumaki Maki".** The closing STARRING sign reads "TSURUMAKI / MAKI". The sign's cross
   (the T of "TETO", which turns upside down at 3:25) is gone with the old name.
 * **The three rewritten lines are on screen as sung:** "INVITE THIS CROWD / TO DANCE TONIGHT" (1:22), "Free thy body
