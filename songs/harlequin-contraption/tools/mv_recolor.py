@@ -576,26 +576,139 @@ def erase_lyrics(fr, pbox, hold):
     erase(fr, box, letters | (m_dark(sub, 0.3) & near(letters, 6)), grow=2, radius=5)
 
 
-def speech_bubble(lines, font_path, size, phase, tail="left"):
-    """a speech bubble like the MV's own: cream, a thick dark wobbly outline, hand-lettered capitals (RGBA)"""
+def fill_smooth(fr, box, mask, exclude=None, scales=(12, 40, 120)):
+    """fill mask (box-local) with the surrounding colours spread smoothly into it (normalised blur at two scales), plus
+    paper grain: no streaks or blotches like inpainting leaves over big areas"""
+    x0, y0, x1, y1 = box
+    sub = fr[y0:y1, x0:x1]
+    if not mask.any():
+        return
+    src = sub.astype(np.float32)
+    valid = (~mask & (~exclude if exclude is not None else True)).astype(np.float32)
+    est = np.zeros_like(src)
+    have = np.zeros(mask.shape, bool)
+    for sg in scales:
+        num = cv2.GaussianBlur(src * valid[..., None], (0, 0), sg)
+        den = cv2.GaussianBlur(valid, (0, 0), sg)
+        ok = (den > 0.08) & ~have
+        est[ok] = num[ok] / den[ok][:, None]
+        have |= ok
+    if not have.all():                                                   # nothing near enough: the average colour
+        est[~have] = np.median(src[valid > 0], axis=0) if (valid > 0).any() else src[~mask].mean(0)
+    g = cv2.cvtColor(sub, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    hp = g - cv2.GaussianBlur(g, (0, 0), 2)
+    sigma = float(np.clip(1.4826 * np.median(np.abs(hp[~mask])), 0.5, 8)) if (~mask).any() else 2.0
+    noise = cv2.GaussianBlur(np.random.default_rng().normal(0, sigma * 1.3, g.shape).astype(np.float32), (0, 0), 0.7)
+    out = np.clip(est + noise[..., None], 0, 255).astype(np.uint8)
+    sub[mask] = out[mask]
+
+
+def dehorn(fr, t):
+    """Teto's masquerade mask (1:34-1:41) has two horns on its top, sometimes drawn as part of the mask and sometimes as
+    shapes of their own: cut them off. The mask is the biggest light, unsaturated shape; it's levelled by the line through
+    its eye holes when both show (else the image's up). Going down from the top, the mask's body starts at the first row
+    as wide as half the mask: anything light above that row near the head is a horn. From behind (1:39) the small light
+    shapes on the head are the horn tips (1:37.5 too). The horns go with their outline, the gap is filled from the hair and
+    background around it, and the mask's new top edge is inked."""
+    h, s, v = hsv(fr)
+    L = (v > 0.6) & (s < 0.25)
+    n, lab, st, cen = cv2.connectedComponentsWithStats(L.astype(np.uint8))
+    if n < 2:
+        return
+    areas = st[:, cv2.CC_STAT_AREA].copy()
+    areas[0] = 0
+    i = int(np.argmax(areas))
+    horns, edge = None, None
+    if areas[i] >= 6000:
+        x0, y0, bw, bh = st[i, :4]
+        X0, Y0, X1, Y1 = clip_box((x0 - bw * 0.6, y0 - bh * 1.2, x0 + bw * 1.6, y0 + bh * 1.1))
+        Lc = L[Y0:Y1, X0:X1]
+        labc = lab[Y0:Y1, X0:X1]
+        M = labc == i
+        rel = [j for j in np.unique(labc) if j and areas[j] >= 80]
+        R = np.isin(labc, rel)                                            # the mask and light shapes around it
+        pad = cv2.copyMakeBorder(M.astype(np.uint8), 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0)
+        ff = pad.copy()
+        cv2.floodFill(ff, None, (0, 0), 2)
+        filled = ff[1:-1, 1:-1] != 2
+        holes = (filled & ~M).astype(np.uint8)
+        nh, labh, sth, cenh = cv2.connectedComponentsWithStats(holes)
+        eyes = sorted(range(1, nh), key=lambda j: -sth[j, cv2.CC_STAT_AREA])[:2]
+        ang = 0.0
+        if len(eyes) == 2 and sth[eyes[1], cv2.CC_STAT_AREA] > 0.003 * filled.sum():
+            d_ = cenh[eyes[1]] - cenh[eyes[0]]
+            if abs(d_[0]) > 20:
+                a_ = np.arctan2(d_[1], d_[0])
+                if a_ > np.pi / 2:
+                    a_ -= np.pi
+                if a_ < -np.pi / 2:
+                    a_ += np.pi
+                if abs(a_) < np.radians(45):
+                    ang = a_
+        yy, xx = np.mgrid[0:Y1 - Y0, 0:X1 - X0].astype(np.float32)
+        cy_, cx_ = cen[i][1] - Y0, cen[i][0] - X0
+        U = -((xx - cx_) * -np.sin(ang) + (yy - cy_) * np.cos(ang))     # up, in the mask's frame
+        Ui = np.round(U).astype(int)
+        lo = Ui[R].min()
+        width = np.bincount(Ui[filled] - lo, minlength=Ui[R].max() - lo + 1)
+        wmax = width.max()
+        rows = np.nonzero(width >= 0.5 * wmax)[0]
+        top = rows.max() + lo                                             # the body's top row
+        hc = Lc & (Ui > top + 2)
+        if hc.sum() > 60:
+            horns = np.zeros(L.shape, bool)
+            horns[Y0:Y1, X0:X1] = hc
+            above = np.zeros(L.shape, bool)
+            above[Y0:Y1, X0:X1] = Ui > top - 3
+            e_ = np.zeros(L.shape, bool)
+            e_[Y0:Y1, X0:X1] = filled & (Ui > top - 6) & (Ui <= top + 2)
+            edge = e_
+    elif 97.4 <= t < 97.85 or 99.0 <= t < 99.75:                          # from behind: the horn tips on her head
+        horns = np.zeros(L.shape, bool)
+        for j in range(1, n):
+            if 80 <= areas[j] <= 5000 and cen[j][1] < 0.6 * HEI:
+                horns |= lab == j
+        above = np.ones(L.shape, bool)
+    if horns is None or horns.sum() < 60:
+        return
+    red = ((h < 25) | (h > 335)) & (s > 0.35) & (v > 0.25)                 # the red line art
+    cut = (near(horns, 7) | (red & near(horns, 13))) & above
+    ys, xs = np.nonzero(cut)
+    bx = clip_box((xs.min() - 150, ys.min() - 150, xs.max() + 150, ys.max() + 150))
+    excl = (near(L, 2) | near(red, 2))[bx[1]:bx[3], bx[0]:bx[2]]          # fill from hair and background only
+    fill_smooth(fr, bx, cut[bx[1]:bx[3], bx[0]:bx[2]], exclude=excl)
+    if edge is not None:
+        fr[edge & near(cut, 4)] = (22, 16, 14)
+
+
+def speech_bubble(lines, font_path, size, phase, aim=(1.0, 0.0), tail_len=70):
+    """a speech bubble like the MV's own: cream, a thick dark wobbly outline, hand-lettered capitals (RGBA). Its tail
+    points along aim (dx, dy); the image is centred on the bubble, so paste() puts the bubble at the given point."""
     blk = TextBlock(lines, font_path, size, (30, 24, 22), line_gap=1.05, wobble=0.035, rot=0.05, seed=50 + len(lines))
     lay = blk.layer(1.0, 0)
     tw, th = blk.w, blk.h
     bw, bh = int(tw * 1.28 + 60), int(th * 1.45 + 46)
-    W_, H_ = bw + 40, bh + 90
+    pad = tail_len + 30
+    W_, H_ = bw + 2 * pad, bh + 2 * pad
     im = Image.new("RGBA", (W_, H_), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     ink, cream = (24, 18, 16, 255), (244, 238, 224, 255)
-    cx, cy = W_ / 2, 20 + bh / 2
-    tx = cx - bw * 0.22 if tail == "left" else cx + bw * 0.22
-    tip = (tx - 60, H_ - 6) if tail == "left" else (tx + 60, H_ - 6)
-    tail_pts = [(tx - 34, cy + bh * 0.36), (tx + 34, cy + bh * 0.36), tip]
-    d.polygon(tail_pts, fill=ink)
+    cx, cy = W_ / 2, H_ / 2
+    ux, uy = aim
+    n_ = max(1e-6, (ux * ux + uy * uy) ** 0.5)
+    ux, uy = ux / n_, uy / n_
+    # where the aim leaves the ellipse, a tail base across it, and the tip beyond
+    k = 1 / ((ux / (bw / 2)) ** 2 + (uy / (bh / 2)) ** 2) ** 0.5
+    ex, ey = cx + ux * k * 0.86, cy + uy * k * 0.86
+    px, py = -uy, ux
+    tip = (cx + ux * (k + tail_len), cy + uy * (k + tail_len))
+    d.polygon([(ex + px * 34, ey + py * 34), (ex - px * 34, ey - py * 34), tip], fill=ink)
     d.ellipse((cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2), fill=ink)
-    d.polygon([(tx - 26, cy + bh * 0.3), (tx + 24, cy + bh * 0.3), ((tip[0] * 3 + tx) / 4, (tip[1] * 3 + cy + bh * 0.3) / 4 - 8)], fill=cream)
+    tip_in = (cx + ux * (k + tail_len - 16), cy + uy * (k + tail_len - 16))
+    d.polygon([(ex + px * 24 - ux * 6, ey + py * 24 - uy * 6), (ex - px * 24 - ux * 6, ey - py * 24 - uy * 6), tip_in], fill=cream)
     d.ellipse((cx - bw / 2 + 8, cy - bh / 2 + 8, cx + bw / 2 - 8, cy + bh / 2 - 8), fill=cream)
     im.alpha_composite(lay, (int(cx - lay.width / 2), int(cy - lay.height / 2)))
-    return Image.fromarray(boil(np.asarray(im), phase, 1.6))
+    return Image.fromarray(boil(np.asarray(im), phase, 1.6)), (bw, bh)
 
 
 def put_player(fr, box, img, phase, keep_fn):
@@ -632,7 +745,7 @@ def put_player(fr, box, img, phase, keep_fn):
 # ---------------------------------------------------------------- frames
 def frames(mv, lut, t0, t1):
     t0 = round(t0 * FPS) / FPS                       # stay on the frame grid, so frame numbers never collide
-    n = int(round((t1 - t0) * FPS))
+    n = max(1, int(round((t1 - t0) * FPS)))
     cmd = ["ffmpeg", "-v", "error", "-ss", f"{t0:.4f}", "-i", mv, "-frames:v", str(n), "-vf", f"lut3d={lut}",
            "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -829,12 +942,16 @@ def run(args):
     lyric_hold = {}
     bubble_cache = {}
 
-    def lyric_bubble(text, phase, tail):
-        k = (text, phase % 2, tail)
+    def lyric_bubble(text, phase, aim_deg):
+        k = (text, phase % 2, aim_deg)
         if k not in bubble_cache:
             f = ImageFont.truetype(font["luckiest-guy"], 46)
-            bubble_cache[k] = speech_bubble(wrap(text, f, 380), font["luckiest-guy"], 46, phase % 2, tail)
+            a = np.radians(aim_deg)
+            bubble_cache[k] = speech_bubble(wrap(text, f, 380), font["luckiest-guy"], 46, phase % 2, (np.cos(a), np.sin(a)))
         return bubble_cache[k]
+
+    def bubble_size(text):
+        return lyric_bubble(text, 0, 0)[1]
     f_title = {k: fnt(k, 21) for k in SONGS}
     f_title["harl"] = ImageFont.truetype(font["m-plus-rounded-1c"], 21)
     TITLE_OF = dict(SONGS) | {"harl": NEW_TITLE}
@@ -995,10 +1112,18 @@ def run(args):
             m = thin_lines(m_goldish(sub), 31) & ~near(m_cream(sub), 8)
             erase(fr, box, m, grow=6, radius=6)
         if 201.58 <= t < 203.58:                                 # pentagram on the stage floor (candles stay)
-            box = (0, 380, 1920, 1080)
+            box = (0, 440, 1920, 1080)
             sub = fr[box[1]:box[3], box[0]:box[2]]
-            m = m_goldish(sub, 0.18, 0.28, 24, 68) & ~near(m_cream(sub), 6)     # lines and their soft gold smears
-            erase(fr, box, m, grow=6, radius=6)
+            strict = m_goldish(sub, 0.3, 0.35, 24, 68)
+            soft = m_goldish(sub, 0.06, 0.2, 18, 75) & near(strict, 14)          # lines, their glow and smears
+            h_, s_, v_ = hsv(sub)
+            wax = (v_ > 0.75) & (s_ < 0.3)
+            candle = near(wax, 3) | (near(wax, 30) & (v_ < 0.16))                  # wax and flames, with their holders
+            gold = m_goldish(sub, 0.22, 0.25, 15, 80)                               # (the floor is a warm grey)
+            fill_smooth(fr, box, near(strict | soft, 6) & ~candle,                 # filled from the plain floor only
+                        exclude=near(gold, 3) | near(wax, 4), scales=(30, 90, 200))
+        if 93.75 <= t < 101.0:                                   # the masquerade mask's horns
+            dehorn(fr, t)
         if 14.70 <= t < 16.0:                                    # full-screen player title
             ui_replace(fr, (60, 22, 1200, 112), t_title_fs, 0.6)
         if PAGE_T[0] <= t < PAGE_T[1]:
@@ -1048,18 +1173,29 @@ def run(args):
                     put_player(fr, (PBOX[0] + dx, PBOX[1] + dy, PBOX[2] + dx, PBOX[3] + dy),
                                player_img(SWAP[key], t), int(t * 15),
                                lambda sub, k=key: player_overlays(sub, bubbles=(k == "lovebug" and t < 24.6), letters=False))
-                    # the lyric line in a speech bubble, popping in when it's sung (after the old video's own bubbles)
+                    # the lyric line in a speech bubble, popping in when it's sung (after the old video's own bubbles).
+                    # The singer is the harlequin in the top sidebar thumbnail, like the MV's own bubbles: the tail
+                    # points at her, the bubble sits in the player's top right next to her
                     for a, b, text in PAGE_LYRICS:
                         if a <= t < b and not old_bubbles:
+                            W_, H_ = PBOX[2] - PBOX[0], PBOX[3] - PBOX[1]
+                            bw, bh = bubble_size(text)
                             low = 27.47 <= t                                  # both characters fill the top: go low
-                            bub = lyric_bubble(text, int(t * 15), "left")
+                            cx = PBOX[2] + dx - bw / 2 - 70
+                            cy = PBOX[1] + dy + (H_ - bh / 2 - 40 if low else bh / 2 + 34)
+                            lay_ = held.get("layout")
+                            if lay_ in layout_geom:                           # the harlequin's thumbnail (first slot)
+                                u0, u1 = layout_geom[lay_][1][0]
+                                tgt = (1530, (u0 + u1) / 2 + held.get("dy", 0))
+                            else:
+                                tgt = (1530, 316)
+                            aim = int(round(np.degrees(np.arctan2(tgt[1] - cy, tgt[0] - cx)) / 5) * 5)
+                            bub, _ = lyric_bubble(text, int(t * 15), aim)
                             pop = easeOutBack(min(1.0, (t - a) / 0.13))
                             if pop < 0.999:
                                 bub = bub.resize((max(1, int(bub.width * pop)), max(1, int(bub.height * pop))), Image.LANCZOS)
-                            W_, H_ = PBOX[2] - PBOX[0], PBOX[3] - PBOX[1]
                             jx = np.random.default_rng(round(t * 15)).uniform(-6, 6) if t >= 24.63 else 0   # the chaos shakes it
-                            cxy = (bx0 + W_ * (0.5 if low else 0.77) + jx, by0 + H_ * (0.8 if low else 0.27))
-                            paste(fr, bub, cxy)
+                            paste(fr, bub, (cx + jx, cy))
             # the sidebar: every frame, each slot's video by the layout on screen, positions found in the frame itself
             fr_cur[0] = fr
             phase = int(t * 15)                                       # the drawings boil on twos

@@ -49,8 +49,9 @@ Vane Lily's MV (animation by nezzu) with these changes:
 
   **Lyrics in bubbles.** The orange lyric lines over the page are gone: in the player, over the sidebar and on the page
   between them. Each line pops up in a speech bubble in the player instead, drawn like the MV's bubbles (cream, a thick
-  dark wobbly outline, hand-lettered capitals). The bubbles appear when the line is sung, after the MV's own bubbles have
-  gone: "THIRSTING FOR A HIGH BEHIND THE FICKLE LIES", "SO DON'T BE COY", "THERE'S WHIMSY TO ENJOY!" and "JUST BLOCK OUT
+  dark wobbly outline, hand-lettered capitals). Like the MV's own bubbles, they come from the harlequin in the top
+  sidebar thumbnail: each sits in the player's top right, with its tail pointed at her thumbnail. The bubbles appear
+  when the line is sung, after the MV's own bubbles have gone: "THIRSTING FOR A HIGH BEHIND THE FICKLE LIES", "SO DON'T BE COY", "THERE'S WHIMSY TO ENJOY!" and "JUST BLOCK OUT
   ALL THE NOISE". They shake during the chaos, and drop low when both Signaling characters fill the top.
 
   **The characters notice the chaos.** In the original, the characters in the player react when the videos start
@@ -80,11 +81,19 @@ Vane Lily's MV (animation by nezzu) with these changes:
     and a flat, inked cartoon look, and they boil with the page.
   * **Overlays.** The light rays at 0:17 stay on top of the thumbnails.
   * **Glitch copy.** The upside-down copy of the sidebar from 0:28 gets the same titles, flipped.
-* **No pentagrams.** The pentagram under Teto at 2:54 and the one on the stage floor at 3:22 are erased. Their thin gold
-  strokes are found by color and shape, so candles, flames and faces stay. A third one flashes in a glitch at 2:41.8
+* **No pentagrams.** The pentagram under Teto at 2:54 and the one on the stage floor at 3:21-3:23 are erased. Their thin
+  gold strokes are found by color and shape, so candles, flames and faces stay. On the stage floor the lines, their glow
+  and their smudges go, and the gap is filled from the plain floor around it (a smooth blend plus paper grain), so no
+  faint outline is left. A third one flashes in a glitch at 2:41.8
   (about nine frames, a glowing pentagram around Teto's face). Those frames show the clean "keep dancin' Harlequin
   contraption" frame from between its flashes instead. It was found by scanning every frame for one-frame flashes and
   thin gold line work.
+* **No horns.** Teto's masquerade mask at 1:34-1:41 has two horns on its top. They're cut off in every frame.
+  * **The mask is levelled** by the line through its eye holes. Going down from the top, its body starts at the first row
+    half as wide as the mask, and anything light above that is a horn.
+  * **Cleanup:** the horns go with their red outline, the gap is filled from the hair and background, and the new top
+    edge is inked.
+  * **Seen from behind** (1:37.5, 1:39), the small light horn tips on her head are removed.
 * **Cleaner erasing.** Inpainted areas get the paper grain back, so they don't show as smooth patches. The new credit
   and sign text is sized to cover the old.
 * **The credit reads "vocal Tsurumaki Maki".** The closing STARRING sign reads "TSURUMAKI / MAKI". The sign's cross
