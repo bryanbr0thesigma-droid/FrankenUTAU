@@ -43,9 +43,27 @@ Vane Lily's MV (animation by nezzu) with these changes:
   * Welcome To The Internet plays pixel Teto from its MV (3:54).
   * The Signaling Remix plays Corrupt-Chan dancing from the reanimation (0:52).
 
-  The clips get Maki's palette and the cartoon look, play on twos and sit inside a rough hand-drawn frame. What the MV
-  draws over the video stays on top: the "DO YOU HEAR ME?" and "DON'T ACT LIKE YOU DON'T SEE ME" bubbles, the lyric
-  lines, and the white loading screen at 0:17.
+  The clips get Maki's palette and the cartoon look, play on twos and sit inside a rough hand-drawn frame. The lyric
+  lines and the white loading screen at 0:17 stay on top. The old video's speech bubbles became lyric text in the MV's
+  style: "DO YOU HEAR ME?" and "DON'T ACT LIKE YOU DON'T SEE ME!", appearing where and when the bubbles did.
+
+  **The characters notice the chaos.** In the original, the characters in the player react when the videos start
+  flipping. Here each song's characters do too, escalating each time their video comes back (0:24.6-0:27.9):
+
+  | Song | 1st | 2nd | 3rd |
+  | --- | --- | --- | --- |
+  | Signaling Remix | Adachi Rei covers her mouth, then startles toward the sidebar | Corrupt-Chan startles, then covers her mouth | both side by side: Rei holds her cheeks, Corrupt-Chan holds her head |
+  | Welcome To The Internet | pixel Teto hops, "!" balloon | shaking, "?!" balloon, sweat drop | |
+  | LEMONADE | the lemon slices get faces, shocked, "!" | panicking, sweat, "!!" | |
+
+  * **Rei and Corrupt-Chan** are new renders of the repo's 3D models (`mv/react.mjs`, chest-up, cel-shaded). Their hands are
+    placed with a small solver in the model lab (`solveArms` in `mv/src/lab.js`), which aims each hand at a point on
+    the face (mouth, cheeks, top of the head). They sit on the Signaling MV's orange and purple panels and jolt with
+    manga shock marks.
+  * **Pixel Teto** is the Welcome To The Internet MV's sprite, read back off its pixel grid from the 3:54 frame.
+  * **Overlapping lyrics.** Where the lyric letters run into the old video's own orange, that frame takes the whole
+    lyric line from the nearest frame where every letter could be read. It's aligned by matching the letter shapes, so
+    nothing doubles or goes missing.
 
   How the sidebar is replaced, in every frame of 0:16-0:28:
 
@@ -75,8 +93,9 @@ Vane Lily's MV (animation by nezzu) with these changes:
   the song).
 
 `tools/mv_recolor.py --mv mv.mp4 --lut maki.cube --audio cover.wav --avatar avatar.jpg --fonts DIR --thumbs DIR
---clips DIR --out out.mp4` does it all. `--thumbs` holds wtti.png, signaling.png and lemonade.png, and `--clips` holds
-wtti.mp4 and signaling.mp4 (the two MVs). `--stills 18,83.5` gives check frames. Fonts: Luckiest Guy, Chewy, Pirata One and M PLUS Rounded 1c
+--clips DIR --out out.mp4` does it all. `--thumbs` holds wtti.png, signaling.png and lemonade.png. `--clips` holds wtti.mp4
+and signaling.mp4 (the two MVs), teto_sprite.png (the pixel sprite) and react/ (the Rei and Corrupt-Chan reaction
+drawings, made with `node mv/react.mjs <clips>/react`). `--stills 18,83.5` gives check frames. Fonts: Luckiest Guy, Chewy, Pirata One and M PLUS Rounded 1c
 (fontsource, converted to TTF).
 
 ## Lyric video

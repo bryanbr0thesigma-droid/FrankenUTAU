@@ -122,6 +122,51 @@ export async function createLab({ width = 1280, height = 720 } = {}) {
     g.fillStyle = "#fff"; g.font = "14px sans-serif"; g.fillText(drape, 6, 16);
     return out.toDataURL("image/png");
   }
+  // aim the hands: find arm parameters (out, up, fwd, bend, twist) that put the middle of each hand at a point given in
+  // the head's frame (x right, y up, -z forward, metres), by coordinate descent from a few starts
+  function solveArms(who, pose, targets) {
+    const b = who === "rei" ? rei : cc, H = b.vrm.humanoid;
+    const head = H.getNormalizedBoneNode("head");
+    const p = JSON.parse(JSON.stringify(pose));
+    p.arms = p.arms || {};
+    const report = {};
+    for (const [k, side] of [["L", "left"], ["R", "right"]]) {
+      const off = targets[k]; if (!off) continue;
+      const hand = H.getRawBoneNode(side + "MiddleProximal") || H.getRawBoneNode(side + "Hand");
+      const keys = ["out", "up", "fwd", "bend", "twist"];
+      const lo = { out: -0.6, up: -1, fwd: -0.4, bend: 0, twist: -2.2 }, hi = { out: 1, up: 1, fwd: 1, bend: 2.75, twist: 2.2 };
+      const err = (A) => {
+        p.arms[k] = { flex: 0, yaw: 0, ...A };
+        applyPose(b.vrm, p); H.update(); b.root.updateMatrixWorld(true);
+        const tgt = head.localToWorld(new THREE.Vector3(...off));
+        return hand.getWorldPosition(new THREE.Vector3()).distanceTo(tgt);
+      };
+      let best = null;
+      for (const seed of [[0.3, -0.3, 0.8, 1.8, 0], [0.2, 0.2, 0.9, 2.3, 1.2], [0.2, 0.2, 0.9, 2.3, -1.2], [0.6, 0.4, 0.5, 1.5, 0.6], [0.8, -0.6, 0.3, 0.6, 0]]) {
+        let A = Object.fromEntries(keys.map((n, i) => [n, seed[i]])), e = err(A), step = 0.4;
+        while (step > 0.005) {
+          let moved = false;
+          for (const n of keys) for (const sg of [1, -1]) {
+            const B = { ...A, [n]: Math.min(hi[n], Math.max(lo[n], A[n] + sg * step)) };
+            const eb = err(B);
+            if (eb < e - 1e-5) { A = B; e = eb; moved = true; }
+          }
+          if (!moved) step /= 2;
+        }
+        if (!best || e < best.e) best = { A, e };
+      }
+      p.arms[k] = { flex: 0, yaw: 0, ...best.A };
+      report[k] = +best.e.toFixed(3);
+    }
+    return { pose: p, err: report };
+  }
+  // one drawing of Rei or Corrupt-Chan (transparent) for the reactions in the Harlequin Contraption MV's player
+  function reactCel(spec) {
+    celSheet("cc", []);
+    if (spec.targets) { const r = solveArms(spec.who, spec.pose, spec.targets); spec = { ...spec, pose: r.pose }; delete spec.targets; console.warn("solve", JSON.stringify(r.err)); }
+    const c = cels.cel({ who: "cc", sticks: false, w: 510, h: 720, cam: [28, 0, 1.0, 4.5, 0, 0.86, 0], ...spec });  // who: "rei" or "cc"
+    return c.img.toDataURL("image/png");
+  }
   function bones() {
     const out = {};
     for (const [k, b] of Object.entries({ rei, cc })) {
@@ -130,5 +175,5 @@ export async function createLab({ width = 1280, height = 720 } = {}) {
     }
     return out;
   }
-  return { view, toon, pose, expr, exprNames, celSheet, sitTest, bones, rei, cc, scene, renderer };
+  return { view, toon, pose, expr, exprNames, celSheet, sitTest, reactCel, bones, rei, cc, scene, renderer };
 }

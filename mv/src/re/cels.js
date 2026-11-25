@@ -219,7 +219,7 @@ export function createCels({ gl, H, actors, scene, faceFn, max = 90 }) {
     const pad = spec.pad || 0, k = 1 + 2 * pad, rw = Math.round(spec.w * k), rh = Math.round(spec.h * k);
     cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * k));
     cam.aspect = spec.w / spec.h; cam.position.set(px, py, pz); cam.lookAt(lx, ly, lz); cam.updateProjectionMatrix();
-    look.position.copy(cam.position);
+    if (spec.look) look.position.set(...spec.look); else look.position.copy(cam.position);   // eyes on the camera unless told
     if (a.vrm.lookAt) a.vrm.lookAt.target = look;
     faceFn(a, spec.mood || {});
     a.vrm.springBoneManager?.reset(); a.b.hairVrm?.springBoneManager?.reset();

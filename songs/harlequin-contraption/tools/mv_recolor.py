@@ -345,8 +345,9 @@ def put_thumb(fr, y0, y1, img, phase):
 
 
 # ---------------------------------------------------------------- the player
-def lemonade_card(w, h, phase, jp_font):
-    """an animated title card for LEMONADE (no video of it here): lemon slices turning, bubbles rising"""
+def lemonade_card(w, h, phase, jp_font, mood=None):
+    """an animated title card for LEMONADE (no video of it here): lemon slices turning, bubbles rising.
+    mood 0/1: the slices get faces and notice the thumbnails flipping (0 shocked, 1 panicking)"""
     y = np.linspace(0, 1, h)[:, None, None]
     im = Image.fromarray((np.array([255, 226, 96]) * (1 - y) + np.array([246, 170, 36]) * y).repeat(w, 1).astype(np.uint8))
     d = ImageDraw.Draw(im)
@@ -357,18 +358,158 @@ def lemonade_card(w, h, phase, jp_font):
         by = (rng.uniform(0, h) - phase * rng.uniform(4, 9)) % (h + 60) - 30
         r = rng.uniform(6, 18)
         d.ellipse((bx - r, by - r, bx + r, by + r), outline=(255, 250, 225), width=3)
-    for cx, cy, r, sp in ((0.82, 0.68, 0.36, 2.0), (0.14, 0.2, 0.22, -3.0), (0.1, 0.9, 0.16, 4.0)):
-        cx, cy, r = cx * w, cy * h, r * h
-        a0 = np.radians(phase * sp)
+    jr = np.random.default_rng(900 + phase)
+    shake = lambda amp: (jr.uniform(-amp, amp), jr.uniform(-amp, amp)) if mood is not None else (0, 0)
+    for n, (cx, cy, r, sp) in enumerate(((0.82, 0.68, 0.36, 2.0), (0.14, 0.2, 0.22, -3.0), (0.1, 0.9, 0.16, 4.0))):
+        sx, sy = shake(5 if mood == 0 else 12)
+        cx, cy, r = cx * w + sx, cy * h + sy, r * h
+        a0 = np.radians(phase * sp) if mood is None else np.radians(phase * sp * 0.2)
         d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(255, 246, 186), outline=ink, width=5)
         d.ellipse((cx - r * 0.86, cy - r * 0.86, cx + r * 0.86, cy + r * 0.86), outline=(242, 196, 50), width=7)
         for j in range(8):
             a = a0 + j * np.pi / 4
             d.line((cx, cy, cx + np.cos(a) * r * 0.8, cy + np.sin(a) * r * 0.8), fill=(240, 200, 60), width=6)
+        if mood is not None:                                             # a face, eyes turned to the sidebar (right)
+            look = r * 0.06
+            for ex in (-0.32, 0.32):
+                X, Y, er = cx + ex * r, cy - 0.1 * r, 0.2 * r
+                d.ellipse((X - er, Y - er * 1.15, X + er, Y + er * 1.15), fill=(255, 255, 255), outline=ink, width=5)
+                pr = er * (0.22 if mood == 0 else 0.3)
+                px = X + look + (jr.uniform(-2, 2) if mood == 1 else 0)
+                d.ellipse((px - pr, Y - pr, px + pr, Y + pr), fill=ink)
+            mw, mh = 0.16 * r, (0.22 if mood == 0 else 0.3) * r
+            d.ellipse((cx - mw, cy + 0.35 * r - mh / 2, cx + mw, cy + 0.35 * r + mh / 2), fill=(120, 30, 30), outline=ink, width=4)
+            if mood == 1:                                                # sweat
+                for k in range(2):
+                    X, Y, q = cx + r * (0.75 + 0.15 * k), cy - r * (0.55 - 0.3 * k), r * 0.09
+                    d.polygon([(X, Y - q * 2.2), (X - q, Y), (X + q, Y)], fill=(150, 210, 255), outline=ink)
+                    d.ellipse((X - q, Y - q, X + q, Y + q), fill=(150, 210, 255), outline=ink, width=3)
     f = ImageFont.truetype(jp_font, int(h * 0.26))
     bob = 6 * np.sin(phase * 0.4)
-    d.text((w / 2, h / 2 + bob), "レモネード", font=f, anchor="mm", fill=(255, 255, 255), stroke_width=12, stroke_fill=ink)
+    tx, ty = shake(6 if mood == 0 else 14)
+    d.text((w / 2 + tx, h / 2 + bob + ty), "レモネード", font=f, anchor="mm", fill=(255, 255, 255), stroke_width=12, stroke_fill=ink)
+    if mood is not None:                                                 # "!!" toward the sidebar
+        fb = ImageFont.truetype(jp_font, int(h * (0.2 if mood == 0 else 0.26)))
+        d.text((w * 0.9 + tx, h * 0.18 + ty), "!" if mood == 0 else "!!", font=fb, anchor="mm", fill=(230, 50, 40),
+               stroke_width=8, stroke_fill=ink)
     return np.asarray(im)
+
+
+# ---------------------------------------------------------------- reactions
+# when the thumbnails start flipping (0:24.6-0:27.9) the characters in the player notice, like the original's do;
+# each song's appearances escalate (from the title under the player, frame by frame)
+REACT_SEGS = [(24.63, 25.13, "signaling", 0), (25.13, 25.63, "wtti", 0), (25.63, 26.03, "lemonade", 0),
+              (26.03, 26.53, "signaling", 1), (26.53, 26.97, "wtti", 1), (26.97, 27.47, "lemonade", 1),
+              (27.47, 27.95, "signaling", 2)]
+
+
+def shock_marks(d, x, y, s, col=(255, 255, 255), ink=(30, 20, 20)):
+    """three short strokes fanning out from a point (manga shock lines)"""
+    for a in (-0.9, -0.45, 0.0):
+        x0, y0 = x + np.sin(a) * s * 0.5, y - np.cos(a) * s * 0.5
+        x1, y1 = x + np.sin(a) * s * 1.3, y - np.cos(a) * s * 1.3
+        d.line((x0, y0, x1, y1), fill=ink, width=12)
+        d.line((x0, y0, x1, y1), fill=col, width=6)
+
+
+def signaling_react(w, h, k, local, cels, phase):
+    """Rei (orange panel) and Corrupt-Chan (purple panel), as in the Signaling MV, reacting to the flipping"""
+    navy, orange, purple = (22, 18, 46), (240, 138, 42), (132, 74, 236)
+    im = Image.new("RGB", (w, h), navy)
+    d = ImageDraw.Draw(im)
+    rng = np.random.default_rng(700 + phase)
+    def panel(x0, x1, col, name, mark):
+        d.rectangle((x0, 0, x1, h), fill=col)
+        cx = (x0 + x1) / 2
+        lite = tuple(min(255, int(c * 1.18 + 20)) for c in col)
+        for rr in (0.22, 0.38, 0.56):
+            d.ellipse((cx - rr * h, h * 0.55 - rr * h, cx + rr * h, h * 0.55 + rr * h), outline=lite, width=3)
+        for (ax, ay, bx, by) in ((x0 + 14, 14, x0 + 70, 14), (x0 + 14, 14, x0 + 14, 70), (x1 - 14, h - 14, x1 - 70, h - 14),
+                                 (x1 - 14, h - 14, x1 - 14, h - 70)):
+            d.line((ax, ay, bx, by), fill=(255, 255, 255), width=3)
+        c = cels[name]
+        sc = h * 1.04 / c.height
+        cw, ch = int(c.width * sc), int(c.height * sc)
+        sx, sy = rng.uniform(-9, 9), rng.uniform(-5, 5)                      # the shock jolts her
+        im.paste(c.resize((cw, ch), Image.LANCZOS), (int(cx - cw / 2 + sx), int(h - ch + 20 + sy)), c.resize((cw, ch), Image.LANCZOS))
+        if mark:
+            shock_marks(d, cx + cw * 0.3 + sx, h * 0.16 + sy, 60)
+    if k == 0:
+        panel(300, 900, orange, "rei_mouth" if local < 0.27 else "rei_startle", True)
+    elif k == 1:
+        panel(300, 900, purple, "cc_startle" if local < 0.25 else "cc_mouth", True)
+    else:
+        panel(30, 590, orange, "rei_cheeks", True)
+        panel(607, 1167, purple, "cc_head" if local < 0.24 else "cc_cheeks", True)
+    return np.asarray(im)
+
+
+PIX = {"!": ["1", "1", "1", "0", "1"], "?": ["111", "001", "011", "000", "010"]}
+
+
+def wtti_react(w, h, k, local, sprite, phase, font_path):
+    """pixel Teto (the Welcome To The Internet MV's sprite) notices: an RPG emote balloon, a hop or a shake"""
+    y = np.linspace(0, 1, h)[:, None, None]
+    im = Image.fromarray((np.array([96, 22, 34]) * (1 - y) + np.array([40, 8, 16]) * y).repeat(w, 1).astype(np.uint8))
+    d = ImageDraw.Draw(im)
+    rng = np.random.default_rng(31)
+    f = ImageFont.truetype(font_path, 54)
+    for n in range(10):                                                  # the MV's "wwww" spam drifting by
+        col = [(240, 90, 200), (90, 230, 90), (90, 150, 255), (250, 230, 80)][n % 4]
+        x = (rng.uniform(-200, w) + phase * rng.uniform(6, 14)) % (w + 300) - 250
+        d.text((x, rng.uniform(0, h - 60)), "w" * int(rng.integers(4, 9)), font=f, fill=col)
+    C = 13                                                               # screen pixels per sprite pixel
+    sw, sh = sprite.width, sprite.height
+    big = sprite.resize((sw * C, sh * C), Image.NEAREST)
+    x0, y0 = w // 2 - sw * C // 2, h - sh * C - 26
+    if k == 0:                                                           # a hop on the "!"
+        y0 -= C * (3 if local < 0.1 else 2 if local < 0.18 else 1 if local < 0.24 else 0)
+    else:                                                                # shaking on "?!"
+        x0 += C * (1 if (phase % 2) else -1)
+    im.paste(big, (x0, y0), big)
+    glyphs = "!" if k == 0 else "?!"
+    gw = sum(len(PIX[g][0]) for g in glyphs) + (len(glyphs) - 1)
+    bw, bh = gw + 4, 9                                                   # the balloon, in sprite pixels
+    bx, by = x0 + (sw - 4) * C, y0 - (bh + 1) * C
+    for j in range(bh):
+        for i in range(bw):
+            edge = i in (0, bw - 1) or j in (0, bh - 1)
+            corner = (i in (0, bw - 1)) and (j in (0, bh - 1))
+            if corner:
+                continue
+            d.rectangle((bx + i * C, by + j * C, bx + (i + 1) * C - 1, by + (j + 1) * C - 1),
+                        fill=(20, 16, 20) if edge else (255, 255, 255))
+    for i in range(2):                                                   # tail toward her head
+        d.rectangle((bx + (1 + i) * C, by + (bh + i) * C, bx + (2 + i) * C - 1, by + (bh + 1 + i) * C - 1), fill=(20, 16, 20))
+    gx = bx + 2 * C
+    for g in glyphs:
+        for j, row in enumerate(PIX[g]):
+            for i, ch in enumerate(row):
+                if ch == "1":
+                    d.rectangle((gx + i * C, by + (2 + j) * C, gx + (i + 1) * C - 1, by + (3 + j) * C - 1), fill=(220, 30, 40))
+        gx += (len(PIX[g][0]) + 1) * C
+    if k == 1:                                                           # a sweat drop by her head
+        for (i, j) in ((1, 0), (0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2), (1, 3)):
+            d.rectangle((x0 - 3 * C + i * C, y0 + 8 * C + j * C, x0 - 2 * C + i * C - 1, y0 + 9 * C + j * C - 1), fill=(130, 200, 255))
+    return np.asarray(im)
+
+
+def find_bubbles(sub):
+    """speech bubbles in the original player: big cream shapes with writing inside; their boxes"""
+    h, s, v = hsv(sub)
+    cream = ((v > 0.85) & (s < 0.25)).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(cream)
+    out = []
+    for i in range(1, n):
+        if st[i, cv2.CC_STAT_AREA] < 4000:
+            continue
+        cnts, _ = cv2.findContours((lab == i).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        filled = np.zeros(cream.shape, np.uint8)
+        cv2.drawContours(filled, cnts, -1, 1, -1)
+        if ((filled > 0) & (lab != i) & (v < 0.35)).sum() > 300:
+            x, y, bw, bh = cv2.boundingRect(filled)
+            out.append((x, y, x + bw, y + bh))
+    return sorted(out, key=lambda b: b[1])
 
 
 def cartoon_fast(img):
@@ -378,22 +519,10 @@ def cartoon_fast(img):
                       interpolation=cv2.INTER_LINEAR)
 
 
-def player_overlays(sub, bubbles):
-    """what the MV draws over the video in the player: the lyric's speech bubbles and its lyric lines"""
+def lyric_letters(sub):
+    """the MV's lyric letters in the player: orange-gold shapes, letter sized, several in a row.
+    Returns (all orange-gold pixels, the sure letters, how many letters)."""
     h, s, v = hsv(sub)
-    keep = np.zeros(sub.shape[:2], bool)
-    if bubbles:
-        cream = ((v > 0.85) & (s < 0.25)).astype(np.uint8)
-        n, lab, st, _ = cv2.connectedComponentsWithStats(cream)
-        for i in range(1, n):
-            if st[i, cv2.CC_STAT_AREA] < 4000:
-                continue
-            cnts, _ = cv2.findContours((lab == i).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            filled = np.zeros(cream.shape, np.uint8)
-            cv2.drawContours(filled, cnts, -1, 1, -1)
-            if ((filled > 0) & (lab != i) & (v < 0.35)).sum() > 300:           # a bubble has writing in it
-                keep |= filled > 0
-        keep = near(keep, 5)
     col = ((h > 12) & (h < 62) & (s > 0.5) & (v > 0.55)).astype(np.uint8)
     n, lab, st, _ = cv2.connectedComponentsWithStats(col)
     H, W, A = st[:, cv2.CC_STAT_HEIGHT], st[:, cv2.CC_STAT_WIDTH], st[:, cv2.CC_STAT_AREA]
@@ -401,14 +530,36 @@ def player_overlays(sub, bubbles):
     cand = cand[cand > 0]
     cy = st[cand, cv2.CC_STAT_TOP] + H[cand] / 2
     line = [c for c, y in zip(cand, cy) if (np.abs(cy - y) < 30).sum() >= 5]   # letters sit in a row
-    if line:
-        sure = np.isin(lab, line)
+    return col.astype(bool), np.isin(lab, line), len(line)
+
+
+def player_overlays(sub, bubbles, band_fill=True, letters=True):
+    """what the MV draws over the video in the player: its lyric lines (and, optionally, speech bubbles).
+    band_fill: also keep orange right next to the letters (letters touching the art); off when the missing letters are
+    pasted from a cleaner frame instead (paste_letters)."""
+    h, s, v = hsv(sub)
+    keep = np.zeros(sub.shape[:2], bool)
+    if bubbles:
+        for (x0, y0, x1, y1) in find_bubbles(sub):
+            keep[y0:y1, x0:x1] = True
+    col, sure, n = lyric_letters(sub)
+    if n and letters:
         ys = np.nonzero(sure.any(1))[0]
         band = np.zeros(col.shape, bool)
         band[max(0, ys.min() - 8):ys.max() + 9] = True
-        # letters that touch the art's own orange merge with it: keep the line's orange near the sure letters
-        keep |= near(sure | (col.astype(bool) & band & near(sure, 40)), 4)
+        keep |= near(sure | ((col & band & near(sure, 40)) if band_fill else False), 4)
     return keep
+
+
+def paste_letters(fr, box, orig, ref_mask, ref_pix):
+    """a frame whose lyric letters ran into the old video's orange: the whole line is taken from the nearby frame where
+    every letter could be read (aligned to this one), with its dark outline; this frame's own letters were left out"""
+    x0, y0, x1, y1 = box
+    h, s, v = hsv(ref_pix)
+    letterish = ((h > 12) & (h < 62) & (s > 0.5) & (v > 0.55)) | (v < 0.32)
+    m = near(ref_mask, 4) & letterish
+    out = fr[y0:y1, x0:x1]
+    out[m] = ref_pix[m]
 
 
 def put_player(fr, box, img, phase, keep_fn):
@@ -605,8 +756,25 @@ def run(args):
     PBOX = (46, 132, 1243, 790)
     clip_cache = {}
 
+    react_cels = {os.path.splitext(n)[0]: Image.open(os.path.join(args.clips, "react", n)).convert("RGBA")
+                  for n in os.listdir(os.path.join(args.clips, "react")) if n.endswith(".png")}
+    teto_sprite = Image.open(os.path.join(args.clips, "teto_sprite.png")).convert("RGBA")
+    react_cache = {}
+
     def player_img(song, t):
         idx = int(t * 15)                                                  # on twos, like the drawings
+        for a, b, sg, k in REACT_SEGS:
+            if a <= t < b and sg == song:
+                if (song, k, idx) not in react_cache:
+                    W_, H_ = PBOX[2] - PBOX[0], PBOX[3] - PBOX[1]
+                    if song == "signaling":
+                        im = cartoon_fast(lut_img(Image.fromarray(signaling_react(W_, H_, k, t - a, react_cels, idx))))
+                    elif song == "wtti":
+                        im = lut_img(Image.fromarray(wtti_react(W_, H_, k, t - a, teto_sprite, idx, font["luckiest-guy"])))
+                    else:
+                        im = lemonade_card(W_, H_, idx, JP, mood=k)
+                    react_cache[(song, k, idx)] = im
+                return react_cache[(song, k, idx)]
         if (song, idx) not in clip_cache:
             if song == "lemonade":
                 img = lemonade_card(PBOX[2] - PBOX[0], PBOX[3] - PBOX[1], idx, JP)
@@ -619,6 +787,67 @@ def run(args):
             clip_cache[(song, idx)] = img
         return clip_cache[(song, idx)]
     playing = {"key": None}
+    lyric_refs = {}
+    ref_frames = {}
+
+    def lyric_ref(t):
+        """letters of the lyric on screen, from the nearby frame (same line) where the most of them could be read"""
+        if not lyric_refs:
+            saved = list(last_off)
+            for tt, f in frames(args.mv, args.lut, 24.5, 27.95):
+                ddx, ddy = page_offset(f)                                  # the same crop put_player works on
+                cx0, cy0, cx1, cy1 = clip_box((PBOX[0] + ddx - 12, PBOX[1] + ddy - 12, PBOX[2] + ddx + 12, PBOX[3] + ddy + 12))
+                _, sure, n = lyric_letters(f[cy0:cy1, cx0:cx1])
+                if n:
+                    ys, xs = np.nonzero(sure.any(1))[0], np.nonzero(sure.any(0))[0]
+                    lyric_refs[round(tt * FPS)] = (np.packbits(sure, axis=1), n, int(ys.min()), int(xs.min()), sure.shape,
+                                                   (cx0, cy0, cx1, cy1), tt)
+            last_off[:] = saved
+            lyric_refs[-1] = None
+        k = round(t * FPS)
+        cur = lyric_refs.get(k)
+        if cur is None:
+            return None
+        near_ = [(j, lyric_refs[j]) for j in range(k - 21, k + 22) if lyric_refs.get(j) is not None
+                 and abs(lyric_refs[j][2] - cur[2]) < 30                      # same line: same height, and its start
+                 and abs(lyric_refs[j][3] - cur[3]) < 3 * abs(j - k) + 25]    # no further off than its drift
+        top = max(r[1] for _, r in near_)
+        j, best = min(((j, r) for j, r in near_ if r[1] >= top - 1), key=lambda jr: abs(jr[0] - k))
+        if best[1] <= cur[1]:
+            return None
+        ref = np.unpackbits(best[0], axis=1)[:, :best[4][1]].astype(bool)
+        if best[6] not in ref_frames:
+            ref_frames.clear()
+            ref_frames[best[6]] = next(frames(args.mv, args.lut, best[6], best[6] + 1 / FPS))[1]
+        bx0, by0, bx1, by1 = best[5]
+        pix = ref_frames[best[6]][by0:by1, bx0:bx1]
+        # the line drifts: line up the letters both frames could read (column and row profiles, best overlap)
+        cs = np.unpackbits(cur[0], axis=1)[:, :cur[4][1]].astype(np.float32)
+        rf = ref.astype(np.float32)
+        # match the letter shapes in 2D (column profiles alone lock on one letter off: the spacing is regular)
+        ry, rx = np.nonzero(ref)
+        ry0, ry1, rx0, rx1 = ry.min(), ry.max() + 1, rx.min(), rx.max() + 1
+        LX, LY = 80, 14
+        img = np.pad(cs, ((LY, LY), (LX, LX)))[ry0:ry1 + 2 * LY, rx0:rx1 + 2 * LX]
+        res = cv2.matchTemplate(img, rf[ry0:ry1, rx0:rx1], cv2.TM_CCORR)
+        _, _, _, loc = cv2.minMaxLoc(res)
+        sx, sy = loc[0] - LX, loc[1] - LY
+        def shift(a):
+            o = np.zeros_like(a)
+            h_, w_ = a.shape[:2]
+            o[max(0, sy):h_ + min(0, sy), max(0, sx):w_ + min(0, sx)] = a[max(0, -sy):h_ - max(0, sy), max(0, -sx):w_ - max(0, sx)]
+            return o
+        return shift(ref), shift(pix)
+    BUBBLE_LINES = [["DO YOU", "HEAR ME?"], ["DON'T ACT LIKE", "YOU DON'T SEE ME!"]]
+    bubble_cache = {}
+
+    def bubble_text(which, size):
+        size = int(size // 4 * 4)
+        if (which, size) not in bubble_cache:
+            bubble_cache[(which, size)] = TextBlock(BUBBLE_LINES[which], font["luckiest-guy"], size, (250, 150, 45),
+                                                    (40, 24, 16), max(3, size // 12), (40, 24, 16), (3, 4),
+                                                    line_gap=1.0, wobble=0.05, rot=0.09, seed=21 + which)
+        return bubble_cache[(which, size)]
     f_title = {k: fnt(k, 21) for k in SONGS}
     f_title["harl"] = ImageFont.truetype(font["m-plus-rounded-1c"], 21)
     TITLE_OF = dict(SONGS) | {"harl": NEW_TITLE}
@@ -824,10 +1053,23 @@ def run(args):
                 key = playing["key"]
                 pv = hsv(fr[150:770, 70:1220])
                 loading = ((pv[2] > 0.85) & (pv[1] < 0.25)).mean() > 0.55          # the white "loading" screen stays
+                ref = lyric_ref(t) if 24.55 <= t < 27.95 else None
                 if key and not loading:
+                    pcrop = clip_box((PBOX[0] + dx - 12, PBOX[1] + dy - 12, PBOX[2] + dx + 12, PBOX[3] + dy + 12))
+                    orig_crop = fr[pcrop[1]:pcrop[3], pcrop[0]:pcrop[2]].copy()
+                    bx0, by0 = PBOX[0] + dx, PBOX[1] + dy
+                    bubbles = find_bubbles(fr[by0:PBOX[3] + dy, bx0:PBOX[2] + dx]) if key == "lovebug" and t < 24.6 else []
                     put_player(fr, (PBOX[0] + dx, PBOX[1] + dy, PBOX[2] + dx, PBOX[3] + dy),
                                player_img(SWAP[key], t), int(t * 15),
-                               lambda sub, k=key: player_overlays(sub, bubbles=(k == "lovebug")))
+                               lambda sub: player_overlays(sub, bubbles=False, letters=ref is None))
+                    if ref is not None and ref[0].shape == orig_crop.shape[:2]:
+                        paste_letters(fr, pcrop, orig_crop, ref[0], ref[1])
+                    # the speech bubbles belonged to the old video: their lines are drawn as lyric text instead
+                    for n, (u0, v0, u1, v1) in enumerate(bubbles[:2]):
+                        which = n if len(bubbles) > 1 else (0 if t < 19.6 else 1)
+                        size = int(np.clip((u1 - u0) / (6.0 if which == 0 else 8.0), 28, 72))
+                        blk = bubble_text(which, size)
+                        paste(fr, blk.layer(1.0, 0, t, jitter=1.2), (bx0 + (u0 + u1) / 2, by0 + (v0 + v1) / 2))
             # the sidebar: every frame, each slot's video by the layout on screen, positions found in the frame itself
             fr_cur[0] = fr
             phase = int(t * 15)                                       # the drawings boil on twos
