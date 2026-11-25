@@ -43,9 +43,15 @@ Vane Lily's MV (animation by nezzu) with these changes:
   * Welcome To The Internet plays pixel Teto from its MV (3:54).
   * The Signaling Remix plays Corrupt-Chan dancing from the reanimation (0:52).
 
-  The clips get Maki's palette and the cartoon look, play on twos and sit inside a rough hand-drawn frame. The lyric
-  lines and the white loading screen at 0:17 stay on top. The old video's speech bubbles became lyric text in the MV's
-  style: "DO YOU HEAR ME?" and "DON'T ACT LIKE YOU DON'T SEE ME!", appearing where and when the bubbles did.
+  The clips get Maki's palette and the cartoon look, play on twos and sit inside a rough hand-drawn frame. The MV's own
+  speech bubbles ("DO YOU HEAR ME?", "DON'T ACT LIKE YOU DON'T SEE ME!") and the white loading screen at 0:17 stay on
+  top.
+
+  **Lyrics in bubbles.** The orange lyric lines over the page are gone: in the player, over the sidebar and on the page
+  between them. Each line pops up in a speech bubble in the player instead, drawn like the MV's bubbles (cream, a thick
+  dark wobbly outline, hand-lettered capitals). The bubbles appear when the line is sung, after the MV's own bubbles have
+  gone: "THIRSTING FOR A HIGH BEHIND THE FICKLE LIES", "SO DON'T BE COY", "THERE'S WHIMSY TO ENJOY!" and "JUST BLOCK OUT
+  ALL THE NOISE". They shake during the chaos, and drop low when both Signaling characters fill the top.
 
   **The characters notice the chaos.** In the original, the characters in the player react when the videos start
   flipping. Here each song's characters do too, escalating each time their video comes back (0:24.6-0:27.9):
@@ -61,9 +67,6 @@ Vane Lily's MV (animation by nezzu) with these changes:
     the face (mouth, cheeks, top of the head). They sit on the Signaling MV's orange and purple panels and jolt with
     manga shock marks.
   * **Pixel Teto** is the Welcome To The Internet MV's sprite, read back off its pixel grid from the 3:54 frame.
-  * **Overlapping lyrics.** Where the lyric letters run into the old video's own orange, that frame takes the whole
-    lyric line from the nearest frame where every letter could be read. It's aligned by matching the letter shapes, so
-    nothing doubles or goes missing.
 
   How the sidebar is replaced, in every frame of 0:16-0:28:
 
@@ -75,7 +78,7 @@ Vane Lily's MV (animation by nezzu) with these changes:
   * **Thumbnails.** Each new thumbnail is drawn row by row between the original thumbnail's own edges in that row. So
     it keeps the original's rough paper edge, and in the glitch frames its torn rows. The pictures get Maki's palette
     and a flat, inked cartoon look, and they boil with the page.
-  * **Overlays.** Orange drawn over the page stays on top: the light rays at 0:17 and the flying lyric letters.
+  * **Overlays.** The light rays at 0:17 stay on top of the thumbnails.
   * **Glitch copy.** The upside-down copy of the sidebar from 0:28 gets the same titles, flipped.
 * **No pentagrams.** The pentagram under Teto at 2:54 and the one on the stage floor at 3:22 are erased. Their thin gold
   strokes are found by color and shape, so candles, flames and faces stay. A third one flashes in a glitch at 2:41.8

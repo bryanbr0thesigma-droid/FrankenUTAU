@@ -128,6 +128,12 @@ def draw_lines(frame, x, y, items):
     frame[y0:y1, x0:x1] = np.asarray(im)
 
 
+def easeOutBack(t):
+    """0..1 with a little overshoot, for things popping in"""
+    t = min(1.0, max(0.0, t))
+    return 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2
+
+
 def clip_box(b):
     x0, y0, x1, y1 = (int(round(v)) for v in b)
     return max(0, x0), max(0, y0), min(WID, x1), min(HEI, y1)
@@ -321,15 +327,13 @@ def put_thumb(fr, y0, y1, img, phase):
         ok = (src >= 0) & (src < W_)
         canvas[r, a_:b_][ok] = pic[r - top, src[ok]]
         region[r, a_:b_] = True
-    # which orange shapes are overlays: they reach outside the thumbnail, or are letter-sized in a lyric row
+    # which orange shapes are overlays: they reach outside the thumbnail (the light rays at 0:17; the lyric letters are
+    # erased before this, see erase_lyrics)
     n, lab, st, _ = cv2.connectedComponentsWithStats(orange_w.astype(np.uint8), connectivity=8)
     inside = np.zeros(orange_w.shape, bool)
     inside[:, XO:] = near(region, 10)
     outside_px = np.bincount(lab[~inside & (lab > 0)], minlength=n)
     keep = outside_px > 30
-    rows_c = st[:, cv2.CC_STAT_TOP] + st[:, cv2.CC_STAT_HEIGHT] // 2
-    keep |= (st[:, cv2.CC_STAT_HEIGHT] < 90) & (st[:, cv2.CC_STAT_WIDTH] < 120) & (st[:, cv2.CC_STAT_AREA] > 150) \
-        & lrow[np.clip(rows_c, 0, len(lrow) - 1)]
     keep[0] = False
     letters = near(keep[lab][:, XO:], 2)
     # cover what is left of the original around it (its rim and dark outline) with the page background
@@ -508,7 +512,7 @@ def find_bubbles(sub):
         cv2.drawContours(filled, cnts, -1, 1, -1)
         if ((filled > 0) & (lab != i) & (v < 0.35)).sum() > 300:
             x, y, bw, bh = cv2.boundingRect(filled)
-            out.append((x, y, x + bw, y + bh))
+            out.append((x, y, x + bw, y + bh, filled > 0))
     return sorted(out, key=lambda b: b[1])
 
 
@@ -535,13 +539,13 @@ def lyric_letters(sub):
 
 def player_overlays(sub, bubbles, band_fill=True, letters=True):
     """what the MV draws over the video in the player: its lyric lines (and, optionally, speech bubbles).
-    band_fill: also keep orange right next to the letters (letters touching the art); off when the missing letters are
-    pasted from a cleaner frame instead (paste_letters)."""
+    band_fill: also keep orange right next to the letters (letters touching the art). letters=False: leave the lyric
+    letters out (they're shown in a speech bubble instead)."""
     h, s, v = hsv(sub)
     keep = np.zeros(sub.shape[:2], bool)
     if bubbles:
-        for (x0, y0, x1, y1) in find_bubbles(sub):
-            keep[y0:y1, x0:x1] = True
+        for *_, shape in find_bubbles(sub):                               # the bubble itself and its dark outline
+            keep |= near(shape, 7)
     col, sure, n = lyric_letters(sub)
     if n and letters:
         ys = np.nonzero(sure.any(1))[0]
@@ -551,15 +555,47 @@ def player_overlays(sub, bubbles, band_fill=True, letters=True):
     return keep
 
 
-def paste_letters(fr, box, orig, ref_mask, ref_pix):
-    """a frame whose lyric letters ran into the old video's orange: the whole line is taken from the nearby frame where
-    every letter could be read (aligned to this one), with its dark outline; this frame's own letters were left out"""
-    x0, y0, x1, y1 = box
-    h, s, v = hsv(ref_pix)
-    letterish = ((h > 12) & (h < 62) & (s > 0.5) & (v > 0.55)) | (v < 0.32)
-    m = near(ref_mask, 4) & letterish
-    out = fr[y0:y1, x0:x1]
-    out[m] = ref_pix[m]
+def erase_lyrics(fr, pbox, hold):
+    """the MV's orange lyric line over the YouTube page (it is shown in a speech bubble in the player instead): its
+    letters and their dark outline are erased outside the player (the player is replaced without them) and outside
+    the sidebar thumbnails (replaced too). hold: the last line's rows, for frames where it can't be read"""
+    y0, y1 = 100, 1000
+    col, sure, n = lyric_letters(fr[y0:y1])
+    if n:
+        ys = np.nonzero(sure.any(1))[0]
+        hold.update(rows=(ys.min() + y0, ys.max() + y0))
+    if not hold.get("rows"):
+        return
+    r0, r1 = hold["rows"]
+    box = clip_box((pbox[2] - 6, r0 - 14, WID, r1 + 16))                 # right of the player: page, sidebar text
+    sub = fr[box[1]:box[3], box[0]:box[2]]
+    h, s, v = hsv(sub)
+    letters = (h > 12) & (h < 62) & (s > 0.5) & (v > 0.55)
+    for u0, u1 in side_thumbs(fr):                                        # thumbnails are replaced whole
+        letters[max(0, u0 - box[1] - 6):max(0, u1 - box[1] + 6), max(0, 1345 - box[0]):max(0, 1726 - box[0])] = False
+    erase(fr, box, letters | (m_dark(sub, 0.3) & near(letters, 6)), grow=2, radius=5)
+
+
+def speech_bubble(lines, font_path, size, phase, tail="left"):
+    """a speech bubble like the MV's own: cream, a thick dark wobbly outline, hand-lettered capitals (RGBA)"""
+    blk = TextBlock(lines, font_path, size, (30, 24, 22), line_gap=1.05, wobble=0.035, rot=0.05, seed=50 + len(lines))
+    lay = blk.layer(1.0, 0)
+    tw, th = blk.w, blk.h
+    bw, bh = int(tw * 1.28 + 60), int(th * 1.45 + 46)
+    W_, H_ = bw + 40, bh + 90
+    im = Image.new("RGBA", (W_, H_), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    ink, cream = (24, 18, 16, 255), (244, 238, 224, 255)
+    cx, cy = W_ / 2, 20 + bh / 2
+    tx = cx - bw * 0.22 if tail == "left" else cx + bw * 0.22
+    tip = (tx - 60, H_ - 6) if tail == "left" else (tx + 60, H_ - 6)
+    tail_pts = [(tx - 34, cy + bh * 0.36), (tx + 34, cy + bh * 0.36), tip]
+    d.polygon(tail_pts, fill=ink)
+    d.ellipse((cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2), fill=ink)
+    d.polygon([(tx - 26, cy + bh * 0.3), (tx + 24, cy + bh * 0.3), ((tip[0] * 3 + tx) / 4, (tip[1] * 3 + cy + bh * 0.3) / 4 - 8)], fill=cream)
+    d.ellipse((cx - bw / 2 + 8, cy - bh / 2 + 8, cx + bw / 2 - 8, cy + bh / 2 - 8), fill=cream)
+    im.alpha_composite(lay, (int(cx - lay.width / 2), int(cy - lay.height / 2)))
+    return Image.fromarray(boil(np.asarray(im), phase, 1.6))
 
 
 def put_player(fr, box, img, phase, keep_fn):
@@ -787,67 +823,18 @@ def run(args):
             clip_cache[(song, idx)] = img
         return clip_cache[(song, idx)]
     playing = {"key": None}
-    lyric_refs = {}
-    ref_frames = {}
-
-    def lyric_ref(t):
-        """letters of the lyric on screen, from the nearby frame (same line) where the most of them could be read"""
-        if not lyric_refs:
-            saved = list(last_off)
-            for tt, f in frames(args.mv, args.lut, 24.5, 27.95):
-                ddx, ddy = page_offset(f)                                  # the same crop put_player works on
-                cx0, cy0, cx1, cy1 = clip_box((PBOX[0] + ddx - 12, PBOX[1] + ddy - 12, PBOX[2] + ddx + 12, PBOX[3] + ddy + 12))
-                _, sure, n = lyric_letters(f[cy0:cy1, cx0:cx1])
-                if n:
-                    ys, xs = np.nonzero(sure.any(1))[0], np.nonzero(sure.any(0))[0]
-                    lyric_refs[round(tt * FPS)] = (np.packbits(sure, axis=1), n, int(ys.min()), int(xs.min()), sure.shape,
-                                                   (cx0, cy0, cx1, cy1), tt)
-            last_off[:] = saved
-            lyric_refs[-1] = None
-        k = round(t * FPS)
-        cur = lyric_refs.get(k)
-        if cur is None:
-            return None
-        near_ = [(j, lyric_refs[j]) for j in range(k - 21, k + 22) if lyric_refs.get(j) is not None
-                 and abs(lyric_refs[j][2] - cur[2]) < 30                      # same line: same height, and its start
-                 and abs(lyric_refs[j][3] - cur[3]) < 3 * abs(j - k) + 25]    # no further off than its drift
-        top = max(r[1] for _, r in near_)
-        j, best = min(((j, r) for j, r in near_ if r[1] >= top - 1), key=lambda jr: abs(jr[0] - k))
-        if best[1] <= cur[1]:
-            return None
-        ref = np.unpackbits(best[0], axis=1)[:, :best[4][1]].astype(bool)
-        if best[6] not in ref_frames:
-            ref_frames.clear()
-            ref_frames[best[6]] = next(frames(args.mv, args.lut, best[6], best[6] + 1 / FPS))[1]
-        bx0, by0, bx1, by1 = best[5]
-        pix = ref_frames[best[6]][by0:by1, bx0:bx1]
-        # the line drifts: line up the letters both frames could read (column and row profiles, best overlap)
-        cs = np.unpackbits(cur[0], axis=1)[:, :cur[4][1]].astype(np.float32)
-        rf = ref.astype(np.float32)
-        # match the letter shapes in 2D (column profiles alone lock on one letter off: the spacing is regular)
-        ry, rx = np.nonzero(ref)
-        ry0, ry1, rx0, rx1 = ry.min(), ry.max() + 1, rx.min(), rx.max() + 1
-        LX, LY = 80, 14
-        img = np.pad(cs, ((LY, LY), (LX, LX)))[ry0:ry1 + 2 * LY, rx0:rx1 + 2 * LX]
-        res = cv2.matchTemplate(img, rf[ry0:ry1, rx0:rx1], cv2.TM_CCORR)
-        _, _, _, loc = cv2.minMaxLoc(res)
-        sx, sy = loc[0] - LX, loc[1] - LY
-        def shift(a):
-            o = np.zeros_like(a)
-            h_, w_ = a.shape[:2]
-            o[max(0, sy):h_ + min(0, sy), max(0, sx):w_ + min(0, sx)] = a[max(0, -sy):h_ - max(0, sy), max(0, -sx):w_ - max(0, sx)]
-            return o
-        return shift(ref), shift(pix)
-    BUBBLE_LINES = [["DO YOU", "HEAR ME?"], ["DON'T ACT LIKE", "YOU DON'T SEE ME!"]]
+    # the lyric lines sung over the YouTube page (lyrics.json), shown in a speech bubble in the player
+    PAGE_LYRICS = [(20.35, 24.1, "THIRSTING FOR A HIGH BEHIND THE FICKLE LIES"), (24.1, 25.6, "SO DON'T BE COY"),
+                   (25.6, 27.62, "THERE'S WHIMSY TO ENJOY!"), (27.62, 27.95, "JUST BLOCK OUT ALL THE NOISE")]
+    lyric_hold = {}
     bubble_cache = {}
 
-    def bubble_text(which, size):
-        size = int(size // 4 * 4)
-        if (which, size) not in bubble_cache:
-            bubble_cache[(which, size)] = TextBlock(BUBBLE_LINES[which], font["luckiest-guy"], size, (250, 150, 45),
-                                                    (40, 24, 16), max(3, size // 12), (40, 24, 16), (3, 4),
-                                                    line_gap=1.0, wobble=0.05, rot=0.09, seed=21 + which)
-        return bubble_cache[(which, size)]
+    def lyric_bubble(text, phase, tail):
+        k = (text, phase % 2, tail)
+        if k not in bubble_cache:
+            f = ImageFont.truetype(font["luckiest-guy"], 46)
+            bubble_cache[k] = speech_bubble(wrap(text, f, 380), font["luckiest-guy"], 46, phase % 2, tail)
+        return bubble_cache[k]
     f_title = {k: fnt(k, 21) for k in SONGS}
     f_title["harl"] = ImageFont.truetype(font["m-plus-rounded-1c"], 21)
     TITLE_OF = dict(SONGS) | {"harl": NEW_TITLE}
@@ -1016,6 +1003,8 @@ def run(args):
             ui_replace(fr, (60, 22, 1200, 112), t_title_fs, 0.6)
         if PAGE_T[0] <= t < PAGE_T[1]:
             dx, dy = page_offset(fr)
+            if 20.2 <= t < 27.95:
+                erase_lyrics(fr, (PBOX[0] + dx, PBOX[1] + dy, PBOX[2] + dx, PBOX[3] + dy), lyric_hold)
             # avatar and channel name
             cx, cy = 84 + dx, 916 + dy
             fr_av = Image.fromarray(fr[cy - 40:cy + 40, cx - 40:cx + 40]).convert("RGBA")
@@ -1053,23 +1042,24 @@ def run(args):
                 key = playing["key"]
                 pv = hsv(fr[150:770, 70:1220])
                 loading = ((pv[2] > 0.85) & (pv[1] < 0.25)).mean() > 0.55          # the white "loading" screen stays
-                ref = lyric_ref(t) if 24.55 <= t < 27.95 else None
                 if key and not loading:
-                    pcrop = clip_box((PBOX[0] + dx - 12, PBOX[1] + dy - 12, PBOX[2] + dx + 12, PBOX[3] + dy + 12))
-                    orig_crop = fr[pcrop[1]:pcrop[3], pcrop[0]:pcrop[2]].copy()
                     bx0, by0 = PBOX[0] + dx, PBOX[1] + dy
-                    bubbles = find_bubbles(fr[by0:PBOX[3] + dy, bx0:PBOX[2] + dx]) if key == "lovebug" and t < 24.6 else []
+                    old_bubbles = find_bubbles(fr[by0:PBOX[3] + dy, bx0:PBOX[2] + dx]) if key == "lovebug" and t < 24.6 else []
                     put_player(fr, (PBOX[0] + dx, PBOX[1] + dy, PBOX[2] + dx, PBOX[3] + dy),
                                player_img(SWAP[key], t), int(t * 15),
-                               lambda sub: player_overlays(sub, bubbles=False, letters=ref is None))
-                    if ref is not None and ref[0].shape == orig_crop.shape[:2]:
-                        paste_letters(fr, pcrop, orig_crop, ref[0], ref[1])
-                    # the speech bubbles belonged to the old video: their lines are drawn as lyric text instead
-                    for n, (u0, v0, u1, v1) in enumerate(bubbles[:2]):
-                        which = n if len(bubbles) > 1 else (0 if t < 19.6 else 1)
-                        size = int(np.clip((u1 - u0) / (6.0 if which == 0 else 8.0), 28, 72))
-                        blk = bubble_text(which, size)
-                        paste(fr, blk.layer(1.0, 0, t, jitter=1.2), (bx0 + (u0 + u1) / 2, by0 + (v0 + v1) / 2))
+                               lambda sub, k=key: player_overlays(sub, bubbles=(k == "lovebug" and t < 24.6), letters=False))
+                    # the lyric line in a speech bubble, popping in when it's sung (after the old video's own bubbles)
+                    for a, b, text in PAGE_LYRICS:
+                        if a <= t < b and not old_bubbles:
+                            low = 27.47 <= t                                  # both characters fill the top: go low
+                            bub = lyric_bubble(text, int(t * 15), "left")
+                            pop = easeOutBack(min(1.0, (t - a) / 0.13))
+                            if pop < 0.999:
+                                bub = bub.resize((max(1, int(bub.width * pop)), max(1, int(bub.height * pop))), Image.LANCZOS)
+                            W_, H_ = PBOX[2] - PBOX[0], PBOX[3] - PBOX[1]
+                            jx = np.random.default_rng(round(t * 15)).uniform(-6, 6) if t >= 24.63 else 0   # the chaos shakes it
+                            cxy = (bx0 + W_ * (0.5 if low else 0.77) + jx, by0 + H_ * (0.8 if low else 0.27))
+                            paste(fr, bub, cxy)
             # the sidebar: every frame, each slot's video by the layout on screen, positions found in the frame itself
             fr_cur[0] = fr
             phase = int(t * 15)                                       # the drawings boil on twos
